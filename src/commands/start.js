@@ -11,7 +11,7 @@ module.exports = async (ctx) => {
     const priceData = await priceService.getSolanaPrice();
     const priceInfo = priceData.error ? 
       '🔴 Price unavailable' : 
-      `${priceService.formatPrice(priceData.price)} | 1H: ${priceService.formatPriceChange(priceData.change1h)} | 24H: ${priceService.formatPriceChange(priceData.change24h)}`;
+      `${priceService.formatPrice(priceData.price)} | ${priceData.change1h !== 0 ? `1H: ${priceService.formatPriceChange(priceData.change1h)} | ` : ''}24H: ${priceService.formatPriceChange(priceData.change24h)}`;
 
     // Get wallet balance
     const balanceInfo = await walletService.getWalletBalance(userId);

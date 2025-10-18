@@ -10,12 +10,12 @@ const CONFIG_LIMITS = {
 };
 
 const STRATEGY_PRESETS = {
-  Degen: {
+  'stable': {
     initialBuyAmount: 0.1,
-    dropPercentage: 8,
-    multiplier: 1.4,
-    maxLevels: 4,
-    profitTarget: 8
+    dropPercentage: 2,
+    multiplier: 1.0,
+    maxLevels: 8,
+    profitTarget: 3
   },
   Regular: {
     initialBuyAmount: 0.1,
@@ -134,10 +134,22 @@ ${generateInvestmentBreakdown(userConfig)}
     [Markup.button.callback('🔙 Back', 'martingale_menu')]
   ]);
 
-  await ctx.editMessageText(message, {
-    parse_mode: 'Markdown',
-    ...keyboard
-  });
+  try {
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      ...keyboard
+    });
+  } catch (error) {
+    if (error.description?.includes('message to edit not found')) {
+      // Message was deleted, send new one
+      await ctx.reply(message, {
+        parse_mode: 'Markdown',
+        ...keyboard
+      });
+    } else {
+      throw error;
+    }
+  }
 };
 
 /**
@@ -608,7 +620,7 @@ const handleConfigChange = async (ctx, configType) => {
   const configLimits = {
     'initial': { min: 0.01, max: 100, step: 0.01 },
     'drop': { min: 1, max: 50, step: 1 },
-    'multiplier': { min: 1.1, max: 5, step: 0.1 },
+    'multiplier': { min: 1.0, max: 5.0, step: 0.1 },
     'levels': { min: 1, max: 10, step: 1 },
     'profit': { min: 1, max: 100, step: 1 }
   };
@@ -628,12 +640,25 @@ const handleConfigChange = async (ctx, configType) => {
 💡 **Send the new value:**
   `;
   
-  await ctx.editMessageText(message, {
-    parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard([
-      [Markup.button.callback('❌ Cancel', 'martingale_configure')]
-    ])
-  });
+  try {
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback('❌ Cancel', 'martingale_configure')]
+      ])
+    });
+  } catch (error) {
+    if (error.description?.includes('message to edit not found')) {
+      await ctx.reply(message, {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback('❌ Cancel', 'martingale_configure')]
+        ])
+      });
+    } else {
+      throw error;
+    }
+  }
   
   // Set user state for value input
   ctx.session = ctx.session || {};
@@ -651,7 +676,7 @@ const handleConfigValueInput = async (ctx) => {
   const configLimits = {
     'initial': { min: 0.01, max: 100 },
     'drop': { min: 1, max: 50 },
-    'multiplier': { min: 1.1, max: 5 },
+    'multiplier': { min: 1.0, max: 5.0 },
     'levels': { min: 1, max: 10 },
     'profit': { min: 1, max: 100 }
   };
@@ -695,7 +720,54 @@ const handleConfigValueInput = async (ctx) => {
     ctx.session.awaitingConfigValue = false;
     
     // Show updated configuration
-    await handleConfigurationMenu(ctx);
+    try {
+      await handleConfigurationMenu(ctx);
+    } catch (error) {
+      if (error.description?.includes('message to edit not found')) {
+        // Send new configuration menu instead of editing
+        const userId = ctx.from.id;
+        const userConfig = getUserConfig(ctx, userId);
+        const maxInvestment = calculateMaxInvestment(userConfig);
+        const maxDrop = (userConfig.dropPercentage * userConfig.maxLevels).toFixed(1);
+        
+        const message = `
+🦈 **TerminalOne🦈**
+
+⚙️ **Martingale Configuration**
+
+🔧 **Current Settings:**
+💰 **Initial Buy Amount:** ${userConfig.initialBuyAmount} SOL
+📉 **Drop Percentage:** ${userConfig.dropPercentage}%
+⚡ **Multiplier:** ${userConfig.multiplier}x
+🔢 **Max Levels:** ${userConfig.maxLevels}
+🎯 **Profit Target:** ${userConfig.profitTarget}%
+📉 **Max Drop:** ${maxDrop}%
+
+📊 **Investment Breakdown:**
+${generateInvestmentBreakdown(userConfig)}
+
+💎 **Total Max Investment:** **${maxInvestment.toFixed(4)} SOL**
+
+⚠️ This is the maximum SOL you could lose if strategy reaches all levels.
+        `;
+        
+        const keyboard = Markup.inlineKeyboard([
+          [Markup.button.callback('🎯 Degen', 'preset_degen'), Markup.button.callback('⚡ Regular', 'preset_regular'), Markup.button.callback('🛡️ Stable', 'preset_stable')],
+          [Markup.button.callback('💰 Initial Amount', 'config_initial'), Markup.button.callback('📉 Drop %', 'config_drop')],
+          [Markup.button.callback('⚡ Multiplier', 'config_multiplier'), Markup.button.callback('🔢 Max Levels', 'config_levels')],
+          [Markup.button.callback('🎯 Profit Target', 'config_profit')],
+          [Markup.button.callback('🔄 Reset to Defaults', 'config_reset'), Markup.button.callback('✅ Save Config', 'config_save')],
+          [Markup.button.callback('🔙 Back', 'martingale_menu')]
+        ]);
+        
+        await ctx.reply(message, {
+          parse_mode: 'Markdown',
+          ...keyboard
+        });
+      } else {
+        throw error;
+      }
+    }
     
   } catch (error) {
     console.error('Error updating config:', error);

@@ -28,23 +28,43 @@ class EnhancedPriceService {
     }
 
     try {
-      const response = await axios.get(
-        'https://api.coingecko.com/api/v3/simple/price',
-        {
-          params: {
-            ids: 'solana',
-            vs_currencies: 'usd',
-            include_24hr_change: true,
-            include_1hr_change: true  // Fixed parameter name
-          },
-          timeout: 10000
-        }
-      );
+      // Try CoinGecko Pro API first (includes 1h change)
+      let response;
+      try {
+        response = await axios.get(
+          'https://pro-api.coingecko.com/api/v3/simple/price',
+          {
+            params: {
+              ids: 'solana',
+              vs_currencies: 'usd',
+              include_24hr_change: true,
+              include_1h_change: true
+            },
+            headers: {
+              'X-Cg-Pro-Api-Key': process.env.COINGECKO_API_KEY || ''
+            },
+            timeout: 10000
+          }
+        );
+      } catch (proError) {
+        // Fallback to free API (no 1h change)
+        response = await axios.get(
+          'https://api.coingecko.com/api/v3/simple/price',
+          {
+            params: {
+              ids: 'solana',
+              vs_currencies: 'usd',
+              include_24hr_change: true
+            },
+            timeout: 10000
+          }
+        );
+      }
 
       const data = response.data.solana;
       const priceData = {
         price: data.usd,
-        change1h: data.usd_1h_change || 0,  // This should now work with include_1hr_change
+        change1h: data.usd_1h_change || 0,  // Will be 0 for free API
         change24h: data.usd_24h_change || 0,
         timestamp: Date.now(),
         source: 'coingecko'

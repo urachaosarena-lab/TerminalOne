@@ -23,8 +23,8 @@ class PriceService {
           params: {
             ids: 'solana',
             vs_currencies: 'usd',
-            include_24hr_change: true,
-            include_1h_change: true
+            include_24hr_change: true
+            // Note: include_1h_change not available in free tier
           },
           timeout: 10000
         }
