@@ -165,8 +165,9 @@ class JupiterTradingService {
         userId
       );
 
-      if (!quote) {
-        throw new Error('Unable to get quote from Jupiter');
+      if (!quote || !quote.outAmount) {
+        logger.error('Invalid Jupiter quote response:', { quote, tokenAddress, amount: lamportsAmount });
+        throw new Error(`Unable to get quote from Jupiter. Token may not be tradable or have insufficient liquidity.`);
       }
 
       logger.info('Jupiter quote received:', {
