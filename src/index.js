@@ -2,12 +2,14 @@ const { Telegraf, session } = require('telegraf');
 const config = require('../config/config');
 const logger = require('./utils/logger');
 const SolanaService = require('./services/SolanaService');
+const WalletService = require('./services/WalletService');
 const EnhancedPriceService = require('./services/EnhancedPriceService');
 const RealtimePriceService = require('./services/RealtimePriceService');
-const WalletService = require('./services/WalletService');
-const MartingaleStrategy = require('./services/MartingaleStrategy');
 const TokenAnalysisService = require('./services/TokenAnalysisService');
+const MartingaleStrategy = require('./services/MartingaleStrategy');
 const RevenueService = require('./services/RevenueService');
+const JupiterTradingService = require('./services/JupiterTradingService');
+const TradingHistoryService = require('./services/TradingHistoryService');
 const ErrorHandlingService = require('./services/ErrorHandlingService');
 const RateLimitService = require('./services/RateLimitService');
 const MonitoringService = require('./services/MonitoringService');
@@ -30,8 +32,12 @@ class TerminalOneBot {
     this.walletService = new WalletService(this.solanaService);
     this.tokenAnalysisService = new TokenAnalysisService(this.enhancedPriceService);
     
+    // Trading service
+    this.jupiterTradingService = new JupiterTradingService(this.solanaService, this.walletService);
+    
     // Production services
     this.revenueService = new RevenueService(this.solanaService);
+    this.tradingHistoryService = new TradingHistoryService();
     this.errorHandlingService = new ErrorHandlingService();
     this.rateLimitService = new RateLimitService();
     this.monitoringService = new MonitoringService();
@@ -40,8 +46,9 @@ class TerminalOneBot {
       this.solanaService,
       this.enhancedPriceService,
       this.walletService,
-      null, // trading service placeholder
-      this.revenueService // revenue service for fee collection
+      this.jupiterTradingService, // real trading service
+      this.revenueService, // revenue service for fee collection
+      this.tradingHistoryService // trading history service for analytics
     );
     
     // Make services available to bot context (deprecated - use middleware)
@@ -87,7 +94,9 @@ class TerminalOneBot {
         wallet: this.walletService,
         tokenAnalysis: this.tokenAnalysisService,
         martingale: this.martingaleService,
+        jupiter: this.jupiterTradingService,
         revenue: this.revenueService,
+        tradingHistory: this.tradingHistoryService,
         errorHandling: this.errorHandlingService,
         rateLimit: this.rateLimitService,
         monitoring: this.monitoringService
@@ -157,6 +166,9 @@ class TerminalOneBot {
     this.bot.action('martingale_execute_launch', martingaleHandlers.handleExecuteLaunch);
     this.bot.action('martingale_active', martingaleHandlers.handleActiveStrategies);
     this.bot.action(/view_strategy_(.+)/, martingaleHandlers.handleViewStrategy);
+    this.bot.action(/pause_strategy_(.+)/, martingaleHandlers.handlePauseStrategy);
+    this.bot.action(/stop_strategy_(.+)/, martingaleHandlers.handleStopStrategy);
+    this.bot.action(/confirm_stop_strategy_(.+)/, martingaleHandlers.handleConfirmStopStrategy);
     
     // Preset callbacks
     this.bot.action('preset_degen', (ctx) => martingaleHandlers.handlePresetSelection(ctx, 'Degen'));
@@ -169,6 +181,12 @@ class TerminalOneBot {
     this.bot.action('config_multiplier', (ctx) => martingaleHandlers.handleConfigChange(ctx, 'multiplier'));
     this.bot.action('config_levels', (ctx) => martingaleHandlers.handleConfigChange(ctx, 'levels'));
     this.bot.action('config_profit', (ctx) => martingaleHandlers.handleConfigChange(ctx, 'profit'));
+    this.bot.action('config_slippage', (ctx) => martingaleHandlers.handleConfigChange(ctx, 'slippage'));
+    
+    // History callbacks
+    this.bot.action('martingale_history', martingaleHandlers.handleTradingHistory);
+    this.bot.action('history_analytics', martingaleHandlers.handleDetailedAnalytics);
+    this.bot.action('history_export', martingaleHandlers.handleExportReport);
     
     // Placeholder callbacks for future features
     this.bot.action('portfolio', (ctx) => {
@@ -185,6 +203,127 @@ class TerminalOneBot {
     
     this.bot.action('settings', (ctx) => {
       ctx.answerCbQuery('⚙️ Settings feature coming soon!');
+    });
+    
+    // Strategies menu
+    this.bot.action('strategies_menu', async (ctx) => {
+      const userId = ctx.from.id;
+      const martingaleService = ctx.services?.martingale;
+      const walletService = ctx.services?.wallet;
+      
+      // Get SOL balance
+      let balanceInfo = '';
+      if (walletService) {
+        const balance = await walletService.getWalletBalance(userId);
+        balanceInfo = balance.hasWallet ? `💰 **Balance:** ${balance.balance.toFixed(4)} SOL` : '💰 **No Wallet Connected**';
+      }
+      
+      // Get active strategies info
+      let activeStrategiesInfo = '';
+      if (martingaleService) {
+        const strategies = martingaleService.getUserStrategies(userId);
+        const activeStrategies = strategies.filter(s => s.status === 'active');
+        
+        if (activeStrategies.length > 0) {
+          const totalPnL = activeStrategies.reduce((total, strategy) => {
+            const currentValue = strategy.totalTokens * (strategy.highestPrice || 0);
+            const pnl = currentValue - strategy.totalInvested;
+            return total + pnl;
+          }, 0);
+          
+          const pnlEmoji = totalPnL >= 0 ? '🜢' : '🔴';
+          const sign = totalPnL >= 0 ? '+' : '';
+          activeStrategiesInfo = `\n📊 **Active Strategies:** ${activeStrategies.length} | **P&L:** ${pnlEmoji} ${sign}${totalPnL.toFixed(4)} SOL`;
+        } else {
+          activeStrategiesInfo = '\n📊 **No active strategies**';
+        }
+      }
+      
+      const message = `
+🦈 **TerminalOne🦈**
+
+🤖 **Trading Strategies**
+
+${balanceInfo}${activeStrategiesInfo}
+
+🎯 **Available Strategies:**
+• **Martingale Bot:** DCA with multipliers
+• **Grid Web:** Advanced grid trading
+• **Yeet Assistant:** AI-powered trades
+      `;
+      
+      await ctx.editMessageText(message, {
+        parse_mode: 'Markdown',
+        ...require('telegraf').Markup.inlineKeyboard([
+          [require('telegraf').Markup.button.callback('🤖 Martingale Bot', 'martingale_menu')],
+          [require('telegraf').Markup.button.callback('🕸️ Grid Web', 'grid_web'), require('telegraf').Markup.button.callback('🚀 Yeet Assistant', 'yeet_assistant')],
+          [require('telegraf').Markup.button.callback('🔙 Back to Main', 'back_to_main')]
+        ])
+      });
+    });
+    
+    // Under construction features
+    this.bot.action('grid_web', async (ctx) => {
+      const message = `
+🦈 **TerminalOne🦈**
+
+🕸️ **Grid Web Trading**
+
+🚧 **Under Construction** 🚧
+
+🔥 **Coming Soon:**
+• 🕸️ Advanced grid trading strategies
+• 🌐 Web-based trading interface
+• 🧮 Multiple grid configurations
+• 📈 Real-time grid performance tracking
+• 🐍 Automated profit taking
+
+📧 **Get notified when ready!**
+      `;
+      
+      await ctx.editMessageText(message, {
+        parse_mode: 'Markdown',
+        ...require('telegraf').Markup.inlineKeyboard([
+          [require('telegraf').Markup.button.callback('🔔 Notify Me', 'notify_grid_web')],
+          [require('telegraf').Markup.button.callback('🤖 Back to Strategies', 'strategies_menu'), require('telegraf').Markup.button.callback('🔙 Main Menu', 'back_to_main')]
+        ])
+      });
+    });
+    
+    this.bot.action('yeet_assistant', async (ctx) => {
+      const message = `
+🦈 **TerminalOne🦈**
+
+🚀 **Yeet Assistant**
+
+🚧 **Under Construction** 🚧
+
+🔥 **Coming Soon:**
+• 🚀 AI-powered trading decisions
+• 🧠 Smart market analysis
+• ⚡ Lightning-fast trade execution
+• 🎯 Automated profit optimization
+• 💬 Natural language trading commands
+
+🤖 **Your AI trading companion!**
+      `;
+      
+      await ctx.editMessageText(message, {
+        parse_mode: 'Markdown',
+        ...require('telegraf').Markup.inlineKeyboard([
+          [require('telegraf').Markup.button.callback('🔔 Notify Me', 'notify_yeet_assistant')],
+          [require('telegraf').Markup.button.callback('🤖 Back to Strategies', 'strategies_menu'), require('telegraf').Markup.button.callback('🔙 Main Menu', 'back_to_main')]
+        ])
+      });
+    });
+    
+    // Notification callbacks (placeholder)
+    this.bot.action('notify_grid_web', (ctx) => {
+      ctx.answerCbQuery('🔔 You\'ll be notified when Grid Web is ready! 🕸️', { show_alert: true });
+    });
+    
+    this.bot.action('notify_yeet_assistant', (ctx) => {
+      ctx.answerCbQuery('🔔 You\'ll be notified when Yeet Assistant is ready! 🚀', { show_alert: true });
     });
     
     this.bot.action('help', helpCommand);
@@ -212,16 +351,19 @@ class TerminalOneBot {
       const result = await ctx.services.wallet.importWallet(userId, privateKey);
       
       if (result.success) {
+        const importTypeEmoji = result.importType === 'mnemonic' ? '🌱' : '🔑';
+        const importTypeText = result.importType === 'mnemonic' ? 'Seed Phrase' : 'Private Key';
+        
         const successMessage = `
 🦈 **TerminalOne🦈**
 
 ✅ **Wallet Imported Successfully!**
 
-🟢 **Your wallet is now connected:**
+🜢 **Your wallet is now connected:**
 📍 **Address:** \`${result.publicKey.slice(0,5)}...${result.publicKey.slice(-5)}\`
+${importTypeEmoji} **Import Type:** ${importTypeText}
 
-💰 **Loading your balance...**
-💡 **Tip:** Your wallet is ready for trading!
+🚀 **Your wallet is ready for trading!**
         `;
         
         const { Markup } = require('telegraf');

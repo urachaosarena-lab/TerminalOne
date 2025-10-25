@@ -109,64 +109,142 @@ class TokenAnalysisService {
       return tokenInput;
     }
 
-    // Try to find by symbol using Jupiter token list
-    try {
-      const response = await axios.get('https://token.jup.ag/all', { timeout: 10000 });
-      const token = response.data.find(t => 
-        t.symbol && t.symbol.toLowerCase() === tokenInput.toLowerCase()
-      );
-      
-      if (token) {
-        logger.info(`Resolved ${tokenInput} to address: ${token.address}`);
-        return token.address;
+    // Try multiple sources to find by symbol
+    const sources = [
+      {
+        name: 'Jupiter All Tokens',
+        url: 'https://token.jup.ag/all',
+        timeout: 8000
+      },
+      {
+        name: 'Jupiter Strict List',
+        url: 'https://token.jup.ag/strict',
+        timeout: 5000
       }
-      
-      logger.warn(`Token ${tokenInput} not found in Jupiter token list`);
-      return null;
-    } catch (error) {
-      logger.error('Failed to resolve token address:', error);
-      return null;
+    ];
+
+    for (const source of sources) {
+      try {
+        logger.info(`Trying to resolve ${tokenInput} using ${source.name}`);
+        const response = await axios.get(source.url, { 
+          timeout: source.timeout,
+          headers: {
+            'User-Agent': 'TerminalOne-Bot/1.0'
+          }
+        });
+        
+        const token = response.data.find(t => 
+          t.symbol && t.symbol.toLowerCase() === tokenInput.toLowerCase()
+        );
+        
+        if (token) {
+          logger.info(`Resolved ${tokenInput} to address: ${token.address} via ${source.name}`);
+          return token.address;
+        }
+        
+      } catch (error) {
+        logger.warn(`Failed to resolve via ${source.name}:`, error.message);
+        continue; // Try next source
+      }
     }
+
+    // If symbol resolution failed, try some common token mappings
+    const commonTokens = {
+      'SOL': 'So11111111111111111111111111111111111111112',
+      'USDC': 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+      'USDT': 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
+      'BONK': 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263',
+      'WIF': 'EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm',
+      'PEPE': '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU'
+    };
+
+    const upperInput = tokenInput.toUpperCase();
+    if (commonTokens[upperInput]) {
+      logger.info(`Found ${tokenInput} in common tokens list: ${commonTokens[upperInput]}`);
+      return commonTokens[upperInput];
+    }
+
+    logger.warn(`Token ${tokenInput} not found in any source`);
+    return null;
   }
 
   /**
    * Get basic token information
    */
   async getTokenBasicInfo(tokenAddress) {
-    try {
-      // Try Jupiter token list first (use 'all' for better coverage)
-      const response = await axios.get('https://token.jup.ag/all', { timeout: 5000 });
-      const token = response.data.find(t => t.address === tokenAddress);
-      
-      if (token) {
-        return {
-          symbol: token.symbol || 'UNKNOWN',
-          name: token.name || 'Unknown Token',
-          decimals: token.decimals || 9,
-          logoURI: token.logoURI
-        };
+    const sources = [
+      {
+        name: 'Jupiter All',
+        fetch: async () => {
+          const response = await axios.get('https://token.jup.ag/all', { 
+            timeout: 5000,
+            headers: { 'User-Agent': 'TerminalOne-Bot/1.0' }
+          });
+          const token = response.data.find(t => t.address === tokenAddress);
+          return token ? {
+            symbol: token.symbol || 'UNKNOWN',
+            name: token.name || 'Unknown Token',
+            decimals: token.decimals || 9,
+            logoURI: token.logoURI
+          } : null;
+        }
+      },
+      {
+        name: 'Jupiter Strict',
+        fetch: async () => {
+          const response = await axios.get('https://token.jup.ag/strict', { 
+            timeout: 3000,
+            headers: { 'User-Agent': 'TerminalOne-Bot/1.0' }
+          });
+          const token = response.data.find(t => t.address === tokenAddress);
+          return token ? {
+            symbol: token.symbol || 'UNKNOWN',
+            name: token.name || 'Unknown Token',
+            decimals: token.decimals || 9,
+            logoURI: token.logoURI
+          } : null;
+        }
+      },
+      {
+        name: 'Birdeye',
+        fetch: async () => {
+          const response = await axios.get(`https://public-api.birdeye.so/defi/token_overview`, {
+            params: { address: tokenAddress },
+            timeout: 8000,
+            headers: { 'User-Agent': 'TerminalOne-Bot/1.0' }
+          });
+          
+          if (response.data.success && response.data.data) {
+            const data = response.data.data;
+            return {
+              symbol: data.symbol || 'UNKNOWN',
+              name: data.name || 'Unknown Token',
+              decimals: data.decimals || 9,
+              logoURI: data.logoURI
+            };
+          }
+          return null;
+        }
       }
+    ];
 
-      // Fallback to Birdeye
-      const birdeyeResponse = await axios.get(`https://public-api.birdeye.so/defi/token_overview`, {
-        params: { address: tokenAddress },
-        timeout: 5000
-      });
-
-      if (birdeyeResponse.data.success) {
-        const data = birdeyeResponse.data.data;
-        return {
-          symbol: data.symbol,
-          name: data.name,
-          decimals: data.decimals,
-          logoURI: data.logoURI
-        };
+    // Try each source in order
+    for (const source of sources) {
+      try {
+        logger.info(`Fetching token info for ${tokenAddress} from ${source.name}`);
+        const result = await source.fetch();
+        if (result && result.symbol !== 'UNKNOWN') {
+          logger.info(`Got token info from ${source.name}: ${result.symbol}`);
+          return result;
+        }
+      } catch (error) {
+        logger.warn(`Failed to get token info from ${source.name}:`, error.message);
+        continue;
       }
-
-    } catch (error) {
-      logger.error('Failed to get token basic info:', error);
     }
 
+    // If all sources fail, return basic info
+    logger.warn(`All sources failed for token ${tokenAddress}, using fallback info`);
     return {
       symbol: 'UNKNOWN',
       name: 'Unknown Token',
@@ -195,6 +273,37 @@ class TokenAnalysisService {
    * Get volume data and trends
    */
   async getVolumeData(tokenAddress) {
+    // Try DexScreener first (more reliable)
+    try {
+      const response = await axios.get(
+        `https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`,
+        {
+          timeout: 8000,
+          headers: {
+            'User-Agent': 'TerminalOne-Bot/1.0'
+          }
+        }
+      );
+
+      if (response.data.pairs && response.data.pairs.length > 0) {
+        // Use the pair with highest liquidity
+        const bestPair = response.data.pairs.reduce((best, current) => {
+          const currentLiquidity = parseFloat(current.liquidity?.usd || 0);
+          const bestLiquidity = parseFloat(best.liquidity?.usd || 0);
+          return currentLiquidity > bestLiquidity ? current : best;
+        });
+
+        return {
+          volume24h: parseFloat(bestPair.volume?.h24 || 0),
+          volumeChange24h: 0, // DexScreener doesn't provide volume change
+          trades24h: parseFloat(bestPair.txns?.h24?.buys || 0) + parseFloat(bestPair.txns?.h24?.sells || 0)
+        };
+      }
+    } catch (error) {
+      logger.warn('Failed to get volume data from DexScreener:', error.message);
+    }
+
+    // Fallback to Birdeye (may require auth)
     try {
       const response = await axios.get(`https://public-api.birdeye.so/defi/token_overview`, {
         params: { address: tokenAddress },
@@ -210,7 +319,7 @@ class TokenAnalysisService {
         };
       }
     } catch (error) {
-      logger.error('Failed to get volume data:', error);
+      logger.warn('Failed to get volume data from Birdeye:', error.message);
     }
 
     return {
@@ -421,8 +530,12 @@ class TokenAnalysisService {
       return `${emoji} ${sign}${num.toFixed(2)}%`;
     };
 
+    // Use the resolved token symbol or show the contract address
+    const displaySymbol = analysis.symbol !== 'UNKNOWN' ? analysis.symbol : 
+      `${analysis.tokenAddress.slice(0,4)}...${analysis.tokenAddress.slice(-4)}`;
+    
     return {
-      header: `📊 **${analysis.symbol}** Analysis`,
+      header: `📊 **${displaySymbol}** Analysis`,
       price: `💰 **Price:** ${formatNumber(analysis.currentPrice)}`,
       changes: `📈 **1H:** ${formatPercentage(analysis.priceChange1h)} | **24H:** ${formatPercentage(analysis.priceChange24h)}`,
       volume: `📊 **Volume 24H:** ${formatNumber(analysis.volume24h)}`,

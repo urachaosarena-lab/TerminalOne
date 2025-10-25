@@ -48,7 +48,7 @@ const handleWalletMenu = async (ctx) => {
     }
     
     buttons.push(
-      [Markup.button.callback('🗑️ Delete Wallet', 'delete_wallet')],
+      [Markup.button.callback('🚪 Log Off Wallet', 'delete_wallet')],
       [Markup.button.callback('🔙 Back', 'back_to_main')]
     );
 
@@ -123,7 +123,7 @@ const handleCreateWallet = async (ctx) => {
 
 const handleImportWallet = async (ctx) => {
   await ctx.editMessageText(
-    '🦈 **TerminalOne🦈**\n\n📥 **Import Existing Wallet**\n\n🔐 Please send your private key in the next message.\n\n**Supported formats:**\n• Base64 encoded key\n• JSON array [1,2,3...]\n\n⚠️ **Security:** Your key will be stored securely and this message will be deleted.',
+    '🦈 **TerminalOne🦈**\n\n📥 **Import Existing Wallet**\n\n🔐 Send your wallet credentials in the next message\n\n**✅ Supported formats:**\n🌱 **Seed Phrase:** 12 or 24 words\n🔑 **Private Key:** Base64 encoded\n📋 **Private Key:** JSON array [1,2,3...]\n\n**💡 Examples:**\n• `word1 word2 word3 ... word12`\n• `lGJkS4wqjmGGol6ZOFQb7luG...`\n• `[123,45,67,89,12...]`\n\n⚠️ **Security:** All data encrypted & this message auto-deleted',
     {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
@@ -227,11 +227,11 @@ const handleCopyAddress = async (ctx) => {
 
 const handleDeleteWallet = async (ctx) => {
   await ctx.editMessageText(
-    '🦈 **TerminalOne🦈**\n\n⚠️ **DELETE WALLET**\n\n🚨 **WARNING:** This action cannot be undone!\n\n• All wallet data will be permanently deleted\n• Make sure you have backed up your private key\n• Any funds will be lost if not backed up\n\n**Are you absolutely sure?**',
+    '🦈 **TerminalOne🦈**\n\n🚪 **LOG OFF WALLET**\n\n⚠️ **This will disconnect your current wallet**\n\n• Your wallet will be removed from this device\n• Your funds remain safe in your wallet\n• You can reconnect anytime with your seed phrase\n• Make sure you have your seed phrase saved!\n\n**Ready to log off?**',
     {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
-        [Markup.button.callback('🗑️ Yes, Delete Forever', 'confirm_delete_wallet')],
+        [Markup.button.callback('🚪 Yes, Log Off', 'confirm_delete_wallet')],
         [Markup.button.callback('❌ Cancel', 'wallet')]
       ])
     }
@@ -247,7 +247,7 @@ const handleConfirmDeleteWallet = async (ctx) => {
     
     if (deleted) {
       await ctx.editMessageText(
-        '🦈 **TerminalOne🦈**\n\n✅ **Wallet Deleted Successfully**\n\n🗑️ Your wallet has been permanently removed from our system.\n\n💡 You can create a new wallet or import an existing one anytime.',
+        '🦈 **TerminalOne🦈**\n\n✅ **Wallet Logged Off Successfully**\n\n🚪 Your wallet has been disconnected from this device.\n\n🔒 **Your funds are still safe in your wallet!**\n💡 You can reconnect anytime or use a different wallet.',
         {
           parse_mode: 'Markdown',
           ...Markup.inlineKeyboard([

@@ -96,24 +96,27 @@ class EnhancedPriceService {
     }
 
     try {
-      // Jupiter Price API v2
+      // Try Jupiter Price API v6 (latest)
       const response = await axios.get(
-        `https://price.jup.ag/v4/price`,
+        `https://price.jup.ag/v6/price`,
         {
           params: {
             ids: tokenAddress
           },
-          timeout: 10000
+          timeout: 8000,
+          headers: {
+            'User-Agent': 'TerminalOne-Bot/1.0'
+          }
         }
       );
 
-      if (!response.data.data[tokenAddress]) {
+      if (!response.data.data || !response.data.data[tokenAddress]) {
         throw new Error('Token not found on Jupiter');
       }
 
       const tokenData = response.data.data[tokenAddress];
       const priceData = {
-        price: tokenData.price,
+        price: tokenData.price || 0,
         change24h: 0, // Jupiter doesn't provide 24h change
         change1h: 0,  // Jupiter doesn't provide 1h change
         timestamp: Date.now(),
@@ -176,6 +179,51 @@ class EnhancedPriceService {
   }
 
   /**
+   * Get token price from DexScreener (very reliable, no auth needed)
+   */
+  async getTokenPriceFromDexScreener(tokenAddress) {
+    try {
+      const response = await axios.get(
+        `https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`,
+        {
+          timeout: 8000,
+          headers: {
+            'User-Agent': 'TerminalOne-Bot/1.0'
+          }
+        }
+      );
+
+      if (!response.data.pairs || response.data.pairs.length === 0) {
+        throw new Error('No pairs found on DexScreener');
+      }
+
+      // Find the most liquid pair (highest liquidity)
+      const bestPair = response.data.pairs.reduce((best, current) => {
+        const currentLiquidity = parseFloat(current.liquidity?.usd || 0);
+        const bestLiquidity = parseFloat(best.liquidity?.usd || 0);
+        return currentLiquidity > bestLiquidity ? current : best;
+      });
+
+      const priceData = {
+        price: parseFloat(bestPair.priceUsd || 0),
+        change24h: parseFloat(bestPair.priceChange?.h24 || 0),
+        change1h: parseFloat(bestPair.priceChange?.h1 || 0),
+        timestamp: Date.now(),
+        source: 'dexscreener',
+        address: tokenAddress,
+        liquidity: parseFloat(bestPair.liquidity?.usd || 0)
+      };
+
+      logger.info(`Fetched token price from DexScreener: ${tokenAddress}`, priceData);
+      return priceData;
+
+    } catch (error) {
+      logger.error(`Failed to fetch token price from DexScreener (${tokenAddress}):`, error.message);
+      throw error;
+    }
+  }
+
+  /**
    * Smart token price fetching (tries multiple sources)
    */
   async getTokenPrice(tokenAddress) {
@@ -184,18 +232,36 @@ class EnhancedPriceService {
       return await this.getSolanaPrice();
     }
 
-    // Try CoinGecko first for established tokens, then Jupiter
-    try {
-      return await this.getTokenPriceFromCoinGecko(tokenAddress);
-    } catch (error) {
-      logger.warn(`CoinGecko failed for ${tokenAddress}, trying Jupiter...`);
+    // Try sources in order of reliability: DexScreener -> CoinGecko -> Jupiter
+    const sources = [
+      { name: 'DexScreener', fn: () => this.getTokenPriceFromDexScreener(tokenAddress) },
+      { name: 'CoinGecko', fn: () => this.getTokenPriceFromCoinGecko(tokenAddress) },
+      { name: 'Jupiter', fn: () => this.getTokenPriceFromJupiter(tokenAddress) }
+    ];
+
+    for (const source of sources) {
       try {
-        return await this.getTokenPriceFromJupiter(tokenAddress);
-      } catch (jupiterError) {
-        logger.error(`Both CoinGecko and Jupiter failed for ${tokenAddress}`);
-        throw new Error(`Unable to fetch price for token: ${tokenAddress}`);
+        logger.info(`Trying ${source.name} for token ${tokenAddress}`);
+        const result = await source.fn();
+        if (result.price > 0) {
+          return result;
+        }
+      } catch (error) {
+        logger.warn(`${source.name} failed for ${tokenAddress}: ${error.message}`);
+        continue;
       }
     }
+
+    // If all sources fail, return fallback data
+    logger.error(`All price sources failed for ${tokenAddress}`);
+    return {
+      price: 0,
+      change24h: 0,
+      change1h: 0,
+      timestamp: Date.now(),
+      source: 'error',
+      address: tokenAddress
+    };
   }
 
   /**

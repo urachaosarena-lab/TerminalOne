@@ -46,51 +46,78 @@ class WalletService {
   }
 
   /**
-   * Import wallet from private key
+   * Import wallet from private key or seed phrase
    */
-  async importWallet(userId, privateKey) {
+  async importWallet(userId, input) {
     try {
       let keypair;
+      let importedMnemonic = null;
 
-      // Try to parse as base64 first, then as array
-      try {
-        const secretKeyBuffer = Buffer.from(privateKey, 'base64');
-        if (secretKeyBuffer.length !== 64) throw new Error('Invalid length');
-        keypair = Keypair.fromSecretKey(secretKeyBuffer);
-      } catch {
+      // First, try to import as seed phrase (12 or 24 words)
+      const words = input.trim().split(/\s+/);
+      if (words.length === 12 || words.length === 24) {
         try {
-          // Try parsing as JSON array
-          const secretKeyArray = JSON.parse(privateKey);
-          if (!Array.isArray(secretKeyArray) || secretKeyArray.length !== 64) {
-            throw new Error('Invalid array format');
+          const { validateMnemonic } = require('bip39');
+          if (validateMnemonic(input.trim())) {
+            // Valid mnemonic - create keypair from it
+            const seed = mnemonicToSeedSync(input.trim());
+            const derivedSeed = derivePath("m/44'/501'/0'/0'", seed.toString('hex')).key;
+            keypair = Keypair.fromSeed(derivedSeed);
+            importedMnemonic = input.trim();
+            logger.info(`Imported wallet from seed phrase for user ${userId}`);
+          } else {
+            throw new Error('Invalid mnemonic');
           }
-          keypair = Keypair.fromSecretKey(Uint8Array.from(secretKeyArray));
+        } catch (mnemonicError) {
+          // If mnemonic parsing fails, continue to try as private key
+          logger.debug('Failed to parse as mnemonic, trying as private key');
+        }
+      }
+
+      // If not a valid mnemonic, try to parse as private key
+      if (!keypair) {
+        try {
+          // Try base64 format first
+          const secretKeyBuffer = Buffer.from(input, 'base64');
+          if (secretKeyBuffer.length !== 64) throw new Error('Invalid length');
+          keypair = Keypair.fromSecretKey(secretKeyBuffer);
         } catch {
-          throw new Error('Invalid private key format');
+          try {
+            // Try parsing as JSON array
+            const secretKeyArray = JSON.parse(input);
+            if (!Array.isArray(secretKeyArray) || secretKeyArray.length !== 64) {
+              throw new Error('Invalid array format');
+            }
+            keypair = Keypair.fromSecretKey(Uint8Array.from(secretKeyArray));
+          } catch {
+            throw new Error('Invalid format');
+          }
         }
       }
 
       const walletData = {
         publicKey: keypair.publicKey.toBase58(),
         privateKey: Buffer.from(keypair.secretKey).toString('base64'),
-        mnemonic: null, // No mnemonic for imported wallets
+        mnemonic: importedMnemonic, // Store mnemonic if imported from seed phrase
         imported: true,
+        importType: importedMnemonic ? 'mnemonic' : 'privateKey',
         createdAt: new Date().toISOString()
       };
 
       // Store wallet for user
       this.userWallets.set(userId, walletData);
 
-      logger.info(`Imported wallet for user ${userId}: ${walletData.publicKey}`);
+      logger.info(`Imported wallet for user ${userId}: ${walletData.publicKey} (${walletData.importType})`);
       
       return {
         publicKey: walletData.publicKey,
-        success: true
+        success: true,
+        importType: walletData.importType
       };
 
     } catch (error) {
       logger.error('Failed to import wallet:', error.message);
-      throw new Error('Invalid private key format. Please provide a valid Solana private key.');
+      throw new Error('Invalid format. Please provide a valid Solana private key (Base64 or JSON array) or 12/24 word seed phrase.');
     }
   }
 

@@ -10,7 +10,7 @@ class RevenueService {
     
     // Fee configuration
     this.TRANSACTION_FEE_PERCENTAGE = 0.01; // 1% fee
-    this.MINIMUM_FEE_SOL = 0.001; // Minimum 0.001 SOL fee
+    this.MINIMUM_FEE_SOL = 0.0005; // Minimum 0.0005 SOL fee
     this.MAXIMUM_FEE_SOL = 0.1; // Maximum 0.1 SOL fee per transaction
     
     // Revenue tracking
