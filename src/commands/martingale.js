@@ -563,7 +563,7 @@ ${alertsSection}${active.map((strategy, index) => {
   `;
 
   const keyboard = active.map((strategy, index) => [
-    Markup.button.callback(`📊 ${strategy.symbol} (${strategy.currentLevel}/${strategy.maxLevels})`, `view_strategy_${strategy.id}`)
+    Markup.button.callback(`${strategy.symbol || 'Token'} (${strategy.currentLevel}/${strategy.maxLevels})`, `view_strategy_${strategy.id}`)
   ]);
   keyboard.push([Markup.button.callback('🔙 Back', 'martingale_menu')]);
 
@@ -579,6 +579,7 @@ ${alertsSection}${active.map((strategy, index) => {
 const handleViewStrategy = async (ctx) => {
   const strategyId = ctx.match[1]; // Extract strategy ID from callback data
   const martingaleService = ctx.services?.martingale;
+  const priceService = ctx.services?.price;
   
   const strategy = martingaleService.getStrategy(strategyId);
   if (!strategy) {
@@ -586,44 +587,76 @@ const handleViewStrategy = async (ctx) => {
     return;
   }
 
-  // Get current token price and SOL price for proper conversion
-  const currentTokenPrice = strategy.highestPrice || strategy.averageBuyPrice || 0;
-  const solPrice = await ctx.services?.price?.getSolanaPrice() || { price: 200 }; // Fallback SOL price
-  
-  // Calculate current value in SOL (tokens * token_price_USD / SOL_price_USD)
-  const currentValueUSD = strategy.totalTokens * currentTokenPrice;
-  const currentValueSOL = currentValueUSD / solPrice.price;
-  
-  // Use net invested amount for accurate P&L calculation
-  const netInvested = strategy.netInvested || (strategy.totalInvested * 0.99);
-  const roi = netInvested > 0 ? 
-    ((currentValueSOL - netInvested) / netInvested * 100) : 0;
-  const profitLoss = currentValueSOL - netInvested;
+  try {
+    // Get live token price with 24h/1h changes
+    let currentTokenPrice;
+    let priceChange1h = 0;
+    let priceChange24h = 0;
+    
+    try {
+      const tokenPriceData = await priceService.getTokenPrice(strategy.tokenAddress);
+      currentTokenPrice = tokenPriceData.price || strategy.averageBuyPrice || 0;
+      priceChange1h = tokenPriceData.change1h || 0;
+      priceChange24h = tokenPriceData.change24h || 0;
+    } catch (error) {
+      // Fallback to stored price
+      currentTokenPrice = strategy.highestPrice || strategy.averageBuyPrice || 0;
+      logger.warn(`Failed to fetch live price for ${strategy.symbol}:`, error.message);
+    }
+    
+    // Get SOL price for conversion
+    const solPrice = await priceService.getSolanaPrice();
+    
+    // Calculate proper average buy price (total spent / total tokens)
+    const avgBuyPrice = strategy.totalInvested > 0 && strategy.totalTokens > 0 ?
+      (strategy.totalInvested * solPrice.price) / strategy.totalTokens : 0;
+    
+    // Calculate current value in SOL
+    const currentValueUSD = strategy.totalTokens * currentTokenPrice;
+    const currentValueSOL = currentValueUSD / solPrice.price;
+    
+    // Calculate gains/losses
+    const totalInvested = strategy.totalInvested;
+    const currentValue = totalInvested + (currentValueSOL - totalInvested); // Total invested + gains/losses
+    const profitLoss = currentValueSOL - totalInvested;
+    
+    // Calculate next buy trigger and sell trigger
+    const nextBuyTrigger = avgBuyPrice * (1 - strategy.dropPercentage / 100);
+    const sellTrigger = avgBuyPrice * (1 + strategy.profitTarget / 100);
+    
+    // Format price changes
+    const formatChange = (change) => {
+      if (change === 0) return 'N/A';
+      const sign = change >= 0 ? '+' : '';
+      const emoji = change >= 0 ? '🟢' : '🔴';
+      return `${emoji} ${sign}${change.toFixed(2)}%`;
+    };
 
-  const message = `
+    const message = `
 🦈 **TerminalOne🦈**
 
-📊 **${strategy.symbol || 'Token'}** Strategy Details
+📊 **${strategy.symbol || 'UNKNOWN'}** Strategy Details
 
 🆔 **ID:** \`${strategy.id.slice(-8)}\`
 📈 **Status:** ${getStatusEmoji(strategy.status)} ${strategy.status.toUpperCase()}
 
 💰 **Financial Summary:**
-• Total Invested: **${strategy.totalInvested.toFixed(4)} SOL**
-• Current Value: **${currentValueSOL.toFixed(4)} SOL**
-• P&L: ${profitLoss >= 0 ? '🟢' : '🔴'} **${profitLoss.toFixed(4)} SOL**
-• ROI: ${roi >= 0 ? '🟢' : '🔴'} **${roi.toFixed(2)}%**
+• Total Invested: **${totalInvested.toFixed(4)} SOL**
+• Current Value: **${currentValue.toFixed(4)} SOL**
+• P&L: ${profitLoss >= 0 ? '🟢' : '🔴'} **${profitLoss >= 0 ? '+' : ''}${profitLoss.toFixed(4)} SOL**
 
 🤖 **Strategy Info:**
 • Level: **${strategy.currentLevel}/${strategy.maxLevels}**
-• Avg Buy Price: **$${strategy.averageBuyPrice.toFixed(8)}**
+• Avg Buy Price: **$${avgBuyPrice.toFixed(8)}**
+• Total Tokens: **${strategy.totalTokens.toFixed(4)} ${strategy.symbol || 'UNKNOWN'}**
+• Next Buy Trigger: **$${nextBuyTrigger.toFixed(8)}**
+• Sell Trigger: **$${sellTrigger.toFixed(8)}**
 • Profit Target: **${strategy.profitTarget}%**
-• Total Tokens: **${strategy.totalTokens.toFixed(4)} ${strategy.symbol}**
-• Next Buy Trigger: **$${strategy.lastBuyPrice ? (strategy.lastBuyPrice * (1 - strategy.dropPercentage / 100)).toFixed(8) : 'N/A'}**
-• Sell Trigger: **$${(currentTokenPrice * (1 + strategy.profitTarget / 100)).toFixed(8)}**
 
 📊 **Price Tracking:**
 • Current: **$${currentTokenPrice.toFixed(8)}**
+• 1H: ${formatChange(priceChange1h)}
+• 24H: ${formatChange(priceChange24h)}
 
 ⏰ **Created:** ${formatDate(strategy.createdAt)}
   `;
@@ -634,14 +667,14 @@ const handleViewStrategy = async (ctx) => {
     [Markup.button.callback('🔙 Active Strategies', 'martingale_active')]
   ]);
 
-  try {
     await ctx.editMessageText(message, {
       parse_mode: 'Markdown',
       ...keyboard
     });
   } catch (error) {
+    logger.error(`Error viewing strategy ${strategyId}:`, error);
     // If edit fails (likely due to identical content), show popup instead
-    await ctx.answerCbQuery('🔄 Strategy refreshed');
+    await ctx.answerCbQuery('🔄 Strategy refreshed').catch(() => {});
   }
 };
 
