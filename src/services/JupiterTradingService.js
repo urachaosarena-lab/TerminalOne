@@ -263,8 +263,7 @@ class JupiterTradingService {
           timestamp: new Date()
         };
       }
-        throw new Error(result.error);
-      }
+      throw new Error(result.error);
 
     }, `Buy Trade (${tokenAddress})`, userId).catch(error => {
       logger.error(`Buy trade failed for user ${userId}:`, error);

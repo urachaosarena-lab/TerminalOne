@@ -5,6 +5,7 @@ const logger = require('../utils/logger');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const encryption = require('../utils/encryption');
 
 class WalletService {
   constructor(solanaService) {
@@ -31,12 +32,19 @@ class WalletService {
         const data = fs.readFileSync(this.walletStoragePath, 'utf8');
         const wallets = JSON.parse(data);
         
-        // Restore wallets to memory
+        // Restore wallets to memory and decrypt sensitive data
         Object.entries(wallets).forEach(([userId, walletData]) => {
+          // Decrypt private key and mnemonic if encrypted
+          if (walletData.privateKey && encryption.isEncrypted(walletData.privateKey)) {
+            walletData.privateKey = encryption.decrypt(walletData.privateKey);
+          }
+          if (walletData.mnemonic && encryption.isEncrypted(walletData.mnemonic)) {
+            walletData.mnemonic = encryption.decrypt(walletData.mnemonic);
+          }
           this.userWallets.set(userId, walletData);
         });
         
-        logger.info(`Loaded ${this.userWallets.size} wallets from persistent storage`);
+        logger.info(`Loaded ${this.userWallets.size} wallets from persistent storage (encrypted)`);
       } else {
         logger.info('No existing wallet data found, starting fresh');
       }
@@ -46,14 +54,25 @@ class WalletService {
   }
   
   /**
-   * Save wallets to persistent storage
+   * Save wallets to persistent storage (with encryption)
    */
   saveWalletsToFile() {
     try {
-      // Convert Map to object for JSON storage
+      // Convert Map to object for JSON storage and encrypt sensitive data
       const walletsObject = {};
       this.userWallets.forEach((wallet, userId) => {
-        walletsObject[userId] = wallet;
+        // Clone wallet to avoid modifying in-memory data
+        const walletCopy = { ...wallet };
+        
+        // Encrypt private key and mnemonic before saving
+        if (walletCopy.privateKey) {
+          walletCopy.privateKey = encryption.encrypt(walletCopy.privateKey);
+        }
+        if (walletCopy.mnemonic) {
+          walletCopy.mnemonic = encryption.encrypt(walletCopy.mnemonic);
+        }
+        
+        walletsObject[userId] = walletCopy;
       });
       
       // Write to file with proper formatting
@@ -63,7 +82,7 @@ class WalletService {
         'utf8'
       );
       
-      logger.info(`Saved ${this.userWallets.size} wallets to persistent storage`);
+      logger.info(`Saved ${this.userWallets.size} wallets to persistent storage (encrypted)`);
     } catch (error) {
       logger.error('Failed to save wallets to file:', error);
     }

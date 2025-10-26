@@ -2,7 +2,10 @@ const logger = require('../utils/logger');
 const config = require('../../config/config');
 
 class MonitoringService {
-  constructor() {
+  constructor(telegramBot = null, adminChatIds = []) {
+    this.telegramBot = telegramBot;
+    this.adminChatIds = adminChatIds;
+    
     this.metrics = {
       uptime: Date.now(),
       totalRequests: 0,
@@ -12,19 +15,28 @@ class MonitoringService {
       activeUsers: new Set(),
       memoryUsage: { heap: 0, external: 0, rss: 0 },
       lastHealthCheck: null,
-      status: 'starting'
+      status: 'starting',
+      recentErrors: [],
+      recentAlerts: []
     };
     
     this.healthChecks = new Map(); // service -> status
     this.alerts = new Map(); // alert type -> last sent time
+    this.ALERT_COOLDOWN = 30 * 60 * 1000; // 30 minutes
     
-    this.isEnabled = config.production.monitoring.enabled;
-    this.alertThresholds = config.production.monitoring.alertThresholds;
-    this.monitoringInterval = config.production.monitoring.interval;
+    this.isEnabled = config.production?.monitoring?.enabled ?? true;
+    this.alertThresholds = config.production?.monitoring?.alertThresholds || {
+      errorRate: 0.1, // 10%
+      memoryUsage: 0.8, // 80%
+      responseTime: 5000 // 5 seconds
+    };
+    this.monitoringInterval = config.production?.monitoring?.interval || 60000;
     
     if (this.isEnabled) {
       this.startMonitoring();
     }
+    
+    logger.info('📊 Monitoring service initialized with alerting');
   }
   
   /**
@@ -80,15 +92,31 @@ class MonitoringService {
   recordError(error, context = {}) {
     this.metrics.errorCount++;
     
+    // Store recent error
+    this.metrics.recentErrors.push({
+      error: error.message,
+      context,
+      timestamp: Date.now()
+    });
+    
+    // Keep only last 50 errors
+    if (this.metrics.recentErrors.length > 50) {
+      this.metrics.recentErrors.shift();
+    }
+    
     // Check if error rate exceeds threshold
     const errorRate = this.getErrorRate();
     if (errorRate > this.alertThresholds.errorRate) {
       this.sendAlert('high_error_rate', {
         errorRate: (errorRate * 100).toFixed(2) + '%',
         threshold: (this.alertThresholds.errorRate * 100).toFixed(2) + '%',
-        recentErrors: this.metrics.errorCount
+        recentErrors: this.metrics.errorCount,
+        latestError: error.message
       });
     }
+    
+    // Log to structured logging
+    logger.logError(context.operation || 'unknown', error, context);
   }
   
   /**
@@ -293,11 +321,50 @@ class MonitoringService {
   }
   
   /**
-   * Send alert to configured webhook
+   * Send alert to admins via Telegram
    */
   async sendAlert(alertType, data) {
-    // Simplified alert function
-    logger.warn(`Alert: ${alertType}`, data);
+    // Check cooldown to prevent spam
+    const lastAlert = this.alerts.get(alertType);
+    if (lastAlert && (Date.now() - lastAlert) < this.ALERT_COOLDOWN) {
+      logger.debug(`Alert suppressed (cooldown): ${alertType}`);
+      return;
+    }
+    
+    // Record alert
+    this.alerts.set(alertType, Date.now());
+    this.metrics.recentAlerts.push({
+      type: alertType,
+      data,
+      timestamp: Date.now()
+    });
+    
+    // Keep only last 50 alerts
+    if (this.metrics.recentAlerts.length > 50) {
+      this.metrics.recentAlerts.shift();
+    }
+    
+    // Format alert message
+    const emoji = alertType.includes('error') ? '⚠️' : alertType.includes('memory') ? '💾' : '🐌';
+    const title = alertType.replace(/_/g, ' ').toUpperCase();
+    const dataStr = JSON.stringify(data, null, 2).replace(/[{}"]/g, '').replace(/,/g, '').trim();
+    const message = `${emoji} *${title}*\n\n${dataStr}\n\n_${new Date().toLocaleString()}_`;
+    
+    // Log alert
+    logger.warn(`ALERT: ${alertType}`, data);
+    
+    // Send to admin chats if Telegram bot available
+    if (this.telegramBot && this.adminChatIds.length > 0) {
+      for (const chatId of this.adminChatIds) {
+        try {
+          await this.telegramBot.telegram.sendMessage(chatId, message, {
+            parse_mode: 'Markdown'
+          });
+        } catch (error) {
+          logger.error(`Failed to send alert to admin ${chatId}:`, error);
+        }
+      }
+    }
   }
   
   /**

@@ -71,7 +71,7 @@ class DeploymentManager {
     }
     
     // Validate Telegram bot token format
-    if (!process.env.TELEGRAM_BOT_TOKEN.match(/^\\d+:[A-Za-z0-9_-]+$/)) {
+    if (!process.env.TELEGRAM_BOT_TOKEN.match(/^\d+:[A-Za-z0-9_-]+$/)) {
       throw new Error('Invalid Telegram bot token format');
     }
     

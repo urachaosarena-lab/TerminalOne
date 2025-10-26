@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const logger = require('../utils/logger');
 
 class MartingaleStrategy {
@@ -9,9 +11,74 @@ class MartingaleStrategy {
     this.revenueService = revenueService;
     this.tradingHistoryService = tradingHistoryService;
     
+    // File persistence
+    this.strategiesStoragePath = path.join(__dirname, '../../data/strategies.json');
+    
     // Active Martingale strategies
     this.activeStrategies = new Map(); // userId -> strategy[]
     this.strategyMonitors = new Map(); // strategyId -> monitoring data
+    
+    // Ensure data directory exists
+    const dataDir = path.dirname(this.strategiesStoragePath);
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    
+    // Load strategies from file
+    this.loadStrategiesFromFile();
+  }
+  
+  loadStrategiesFromFile() {
+    try {
+      if (fs.existsSync(this.strategiesStoragePath)) {
+        const data = fs.readFileSync(this.strategiesStoragePath, 'utf8');
+        const strategies = JSON.parse(data);
+        
+        Object.entries(strategies).forEach(([userId, userStrategies]) => {
+          // Convert date strings back to Date objects
+          const restoredStrategies = userStrategies.map(strategy => ({
+            ...strategy,
+            createdAt: new Date(strategy.createdAt),
+            lastCheck: new Date(strategy.lastCheck),
+            completedAt: strategy.completedAt ? new Date(strategy.completedAt) : undefined,
+            stoppedAt: strategy.stoppedAt ? new Date(strategy.stoppedAt) : undefined,
+            buyOrders: strategy.buyOrders.map(order => ({
+              ...order,
+              timestamp: new Date(order.timestamp)
+            }))
+          }));
+          
+          this.activeStrategies.set(userId, restoredStrategies);
+          
+          // Restart monitoring for active strategies
+          restoredStrategies.forEach(strategy => {
+            if (strategy.status === 'active') {
+              this.startStrategyMonitoring(strategy).catch(err => {
+                logger.error(`Failed to restart monitoring for strategy ${strategy.id}:`, err);
+              });
+            }
+          });
+        });
+        
+        logger.info(`Loaded ${this.activeStrategies.size} users with strategies from storage`);
+      }
+    } catch (error) {
+      logger.error('Failed to load strategies:', error);
+    }
+  }
+  
+  saveStrategiesToFile() {
+    try {
+      const strategiesObject = {};
+      this.activeStrategies.forEach((strategies, userId) => {
+        strategiesObject[userId] = strategies;
+      });
+      
+      fs.writeFileSync(this.strategiesStoragePath, JSON.stringify(strategiesObject, null, 2), 'utf8');
+      logger.info(`Saved ${this.activeStrategies.size} users' strategies to storage`);
+    } catch (error) {
+      logger.error('Failed to save strategies:', error);
+    }
   }
 
   /**
@@ -84,6 +151,7 @@ class MartingaleStrategy {
       this.activeStrategies.set(userId, []);
     }
     this.activeStrategies.get(userId).push(strategy);
+    this.saveStrategiesToFile();
 
     // Log strategy creation
     if (this.tradingHistoryService) {
@@ -186,10 +254,12 @@ class MartingaleStrategy {
       }
 
       strategy.buyOrders.push(buyOrder);
+      this.saveStrategiesToFile();
 
     } catch (error) {
       logger.error(`Initial buy failed for strategy ${strategy.id}:`, error);
       strategy.status = 'failed';
+      this.saveStrategiesToFile();
       throw error;
     }
   }
@@ -403,6 +473,7 @@ class MartingaleStrategy {
       }
 
       strategy.buyOrders.push(buyOrder);
+      this.saveStrategiesToFile();
 
     } catch (error) {
       logger.error(`Martingale buy execution failed for strategy ${strategy.id}:`, error);
@@ -486,6 +557,7 @@ class MartingaleStrategy {
 
         // Stop monitoring
         await this.stopStrategyMonitoring(strategy.id);
+        this.saveStrategiesToFile();
 
         logger.info(`Strategy ${strategy.id} completed successfully:`, {
           totalInvested: strategy.totalInvested,
@@ -617,6 +689,7 @@ class MartingaleStrategy {
         }
 
         await this.stopStrategyMonitoring(strategy.id);
+        this.saveStrategiesToFile();
 
         logger.warn(`Strategy ${strategy.id} stopped with loss:`, {
           totalInvested: strategy.totalInvested,
@@ -886,6 +959,7 @@ class MartingaleStrategy {
     const strategy = this.getStrategy(strategyId);
     if (strategy && strategy.status === 'active') {
       strategy.status = 'paused';
+      this.saveStrategiesToFile();
       return true;
     }
     return false;
@@ -895,6 +969,7 @@ class MartingaleStrategy {
     const strategy = this.getStrategy(strategyId);
     if (strategy && strategy.status === 'paused') {
       strategy.status = 'active';
+      this.saveStrategiesToFile();
       return true;
     }
     return false;

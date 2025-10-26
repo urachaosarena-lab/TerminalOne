@@ -179,6 +179,7 @@ class TerminalOneBot {
     this.bot.action(/pause_strategy_(.+)/, martingaleHandlers.handlePauseStrategy);
     this.bot.action(/stop_strategy_(.+)/, martingaleHandlers.handleStopStrategy);
     this.bot.action(/confirm_stop_strategy_(.+)/, martingaleHandlers.handleConfirmStopStrategy);
+    this.bot.action(/collect_strategy_rewards_(.+)/, martingaleHandlers.handleCollectStrategyRewards);
     
     // Preset callbacks
     this.bot.action('preset_degen', (ctx) => martingaleHandlers.handlePresetSelection(ctx, 'Degen'));

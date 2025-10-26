@@ -268,7 +268,7 @@ class BattleService {
           target.lastAction = `Attacked by ${attacker.name} Bleeding 🩸`;
         }
       }
-    }
+    } else if (ability.effect === 'heal') {
       allies.forEach(ally => {
         if (ally.hp > 0 && ally.hp < ally.maxHp) {
           const heal = ability.value;

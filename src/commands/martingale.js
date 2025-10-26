@@ -611,14 +611,14 @@ const handleViewStrategy = async (ctx) => {
     const avgBuyPrice = strategy.totalInvested > 0 && strategy.totalTokens > 0 ?
       (strategy.totalInvested * solPrice.price) / strategy.totalTokens : 0;
     
-    // Calculate current value in SOL
+    // Calculate current value in SOL: total tokens bought * current price of the token
     const currentValueUSD = strategy.totalTokens * currentTokenPrice;
     const currentValueSOL = currentValueUSD / solPrice.price;
     
-    // Calculate gains/losses
+    // Calculate gains/losses: Current value - total invested
     const totalInvested = strategy.totalInvested;
-    const currentValue = totalInvested + (currentValueSOL - totalInvested); // Total invested + gains/losses
-    const profitLoss = currentValueSOL - totalInvested;
+    const currentValue = currentValueSOL; // This is the actual current value
+    const profitLoss = currentValueSOL - totalInvested; // P&L = current value - total invested
     
     // Calculate next buy trigger and sell trigger
     const nextBuyTrigger = avgBuyPrice * (1 - strategy.dropPercentage / 100);
@@ -895,7 +895,7 @@ const handleConfirmStopStrategy = async (ctx) => {
     const currentPrice = await ctx.services.price.getTokenPrice(strategy.tokenAddress);
     const solPrice = await ctx.services.price.getSolanaPrice();
     
-    // Calculate current value in SOL
+    // Calculate current value in SOL: total tokens * current price
     const currentValueUSD = strategy.totalTokens * currentPrice.price;
     const currentValueSOL = currentValueUSD / solPrice.price;
     const netInvested = strategy.netInvested || (strategy.totalInvested * 0.99);
@@ -908,10 +908,51 @@ const handleConfirmStopStrategy = async (ctx) => {
     strategy.stoppedAt = new Date();
     strategy.stopReason = 'manual_stop';
     
-    // Stop monitoring
+    // Stop monitoring and save
     await martingaleService.stopStrategyMonitoring(strategyId);
+    martingaleService.saveStrategiesToFile();
     
-    const finalMessage = `
+    // Calculate XP and rewards based on strategy performance
+    const baseXP = 150; // Base XP for completing a strategy
+    const bonusXP = strategy.finalProfit > 0 ? Math.floor(strategy.finalProfitPercentage * 2) : 0; // 2 XP per 1% profit
+    const totalXP = baseXP + bonusXP;
+    
+    // Award currency based on invested amount
+    const currencyReward = Math.floor(strategy.totalInvested * 10); // 10 💎S per SOL invested
+    
+    // Generate loot chance (20% for strategy completion)
+    let lootItem = null;
+    if (Math.random() < 0.2) {
+      const lootTypes = ['class', 'weapon', 'pet'];
+      const lootType = lootTypes[Math.floor(Math.random() * lootTypes.length)];
+      const rarities = ['common', 'rare', 'legendary'];
+      const rarityRoll = Math.random();
+      const rarity = rarityRoll < 0.7 ? 'common' : rarityRoll < 0.95 ? 'rare' : 'legendary';
+      lootItem = { type: lootType, rarity };
+    }
+    
+    // Store rewards in session for collection
+    ctx.session = ctx.session || {};
+    ctx.session.pendingRewards = {
+      strategyId,
+      xp: totalXP,
+      currency: currencyReward,
+      loot: lootItem,
+      baseXP,
+      bonusXP
+    };
+    
+    // Show rewards collection panel
+    const rarityEmoji = {
+      'common': '⚪',
+      'rare': '🔵',
+      'legendary': '🟠'
+    };
+    
+    const lootText = lootItem ? 
+      `\n🎁 **Loot:** ${rarityEmoji[lootItem.rarity]} ${lootItem.type.toUpperCase()}` : '';
+    
+    const rewardsMessage = `
 🦈 **TerminalOne🦈**
 
 ✅ **Strategy Stopped Successfully**
@@ -922,19 +963,20 @@ const handleConfirmStopStrategy = async (ctx) => {
 📊 **Final Status:**
 • Total Invested: **${strategy.totalInvested.toFixed(4)} SOL**
 • Current Value: **${currentValueSOL.toFixed(4)} SOL**
-• Unrealized P&L: ${strategy.finalProfit >= 0 ? '🟢' : '🔴'} **${strategy.finalProfit.toFixed(4)} SOL**
-• ROI: ${strategy.finalProfitPercentage >= 0 ? '🟢' : '🔴'} **${strategy.finalProfitPercentage.toFixed(2)}%**
-• Tokens Held: **${strategy.totalTokens.toFixed(4)} ${strategy.symbol}**
+• P&L: ${strategy.finalProfit >= 0 ? '🟢' : '🔴'} **${strategy.finalProfit >= 0 ? '+' : ''}${strategy.finalProfit.toFixed(4)} SOL**
+• ROI: ${strategy.finalProfitPercentage >= 0 ? '🟢' : '🔴'} **${strategy.finalProfitPercentage >= 0 ? '+' : ''}${strategy.finalProfitPercentage.toFixed(2)}%**
 
-🛑 **Strategy monitoring stopped. Your tokens remain in your wallet.**
+🎉 **Rewards Earned:**
+⭐ **XP:** +${totalXP} ${bonusXP > 0 ? `(${baseXP} base + ${bonusXP} bonus)` : ''}
+💎 **Currency:** +${currencyReward} 💎S${lootText}
+
+👇 **Click below to collect your rewards!**
     `;
     
-    await ctx.editMessageText(finalMessage, {
+    await ctx.editMessageText(rewardsMessage, {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
-        [Markup.button.callback('📊 View History', 'martingale_history')],
-        [Markup.button.callback('🔍 Launch New Strategy', 'martingale_launch')],
-        [Markup.button.callback('🔙 Main Menu', 'back_to_main')]
+        [Markup.button.callback('🎁 Collect Rewards', `collect_strategy_rewards_${strategyId}`)],
       ])
     });
 
@@ -951,6 +993,92 @@ const handleConfirmStopStrategy = async (ctx) => {
         ])
       }
     );
+  }
+};
+
+/**
+ * Handle collect strategy rewards
+ */
+const handleCollectStrategyRewards = async (ctx) => {
+  const strategyId = ctx.match[1];
+  const userId = ctx.from.id;
+  const heroService = ctx.services?.hero;
+  
+  // Retrieve pending rewards from session
+  const pendingRewards = ctx.session?.pendingRewards;
+  
+  if (!pendingRewards || pendingRewards.strategyId !== strategyId) {
+    await ctx.answerCbQuery('❌ No pending rewards found');
+    return;
+  }
+  
+  if (!heroService) {
+    await ctx.answerCbQuery('❌ Hero service not available');
+    return;
+  }
+  
+  try {
+    // Award XP and currency
+    heroService.addXP(userId, pendingRewards.xp);
+    const actualCurrency = heroService.addCurrency(userId, pendingRewards.currency);
+    
+    // Add loot item if available
+    let lootResult = null;
+    if (pendingRewards.loot) {
+      const lootItem = pendingRewards.loot;
+      const itemMap = {
+        'class': Object.keys(require('../services/HeroService').CLASSES),
+        'weapon': Object.keys(require('../services/HeroService').WEAPONS),
+        'pet': Object.keys(require('../services/HeroService').PETS)
+      };
+      
+      const items = itemMap[lootItem.type];
+      const randomItemId = items[Math.floor(Math.random() * items.length)];
+      lootResult = heroService.addItem(userId, lootItem.type, randomItemId, lootItem.rarity);
+    }
+    
+    // Clear pending rewards
+    ctx.session.pendingRewards = null;
+    
+    // Prepare reward collection message
+    const rarityEmoji = {
+      'common': '⚪',
+      'rare': '🔵',
+      'legendary': '🟠'
+    };
+    
+    const lootText = pendingRewards.loot && lootResult?.success ?
+      `\n🎁 **Loot Added:** ${rarityEmoji[pendingRewards.loot.rarity]} ${pendingRewards.loot.type.toUpperCase()}` :
+      '';
+    
+    const lootFailText = pendingRewards.loot && !lootResult?.success ?
+      `\n⚠️ **Inventory Full** - Loot could not be added` : '';
+    
+    const rewardMessage = `
+🦈 **TerminalOne🦈**
+
+✅ **Rewards Collected!**
+
+🎉 **You received:**
+⭐ **XP:** +${pendingRewards.xp} ${pendingRewards.bonusXP > 0 ? `(${pendingRewards.baseXP} base + ${pendingRewards.bonusXP} bonus)` : ''}
+💎 **Currency:** +${actualCurrency} 💎S${lootText}${lootFailText}
+
+🚀 **Keep trading to earn more rewards!**
+    `;
+    
+    await ctx.editMessageText(rewardMessage, {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback('📊 Active Strategies', 'martingale_active')],
+        [Markup.button.callback('🔙 Main Menu', 'back_to_main')]
+      ])
+    });
+    
+    await ctx.answerCbQuery('✅ Rewards collected!');
+    
+  } catch (error) {
+    logger.error(`Error collecting strategy rewards for ${strategyId}:`, error);
+    await ctx.answerCbQuery('❌ Error collecting rewards');
   }
 };
 
@@ -1384,6 +1512,7 @@ module.exports = {
   handlePauseStrategy,
   handleStopStrategy,
   handleConfirmStopStrategy,
+  handleCollectStrategyRewards,
   handleConfigChange,
   handleConfigValueInput,
   handlePresetSelection,
