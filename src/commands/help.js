@@ -2,7 +2,7 @@ const { Markup } = require('telegraf');
 
 module.exports = async (ctx) => {
   const helpMessage = `
-🦈 **TerminalOne🦈**
+${getBotTitle()}
 
 🟠 **Help & Features**
 

@@ -1,4 +1,5 @@
 const { Markup } = require('telegraf');
+const { getBotTitle } = require('../utils/version');
 
 const displayBattle = (battle) => {
   // Display enemies at top

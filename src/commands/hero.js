@@ -1,4 +1,5 @@
 const { Markup } = require('telegraf');
+const { getBotTitle } = require('../utils/version');
 const { CLASSES, WEAPONS, PETS } = require('../services/HeroService');
 
 const handleHeroMenu = async (ctx) => {

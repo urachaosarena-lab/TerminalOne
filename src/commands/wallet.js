@@ -9,7 +9,7 @@ const handleWalletMenu = async (ctx) => {
     
     if (!balanceInfo.hasWallet) {
       await ctx.editMessageText(
-        '🦈 **TerminalOne🦈**\n\n❌ No wallet found. Please create or import a wallet first.',
+        '${getBotTitle()}\n\n❌ No wallet found. Please create or import a wallet first.',
         {
           parse_mode: 'Markdown',
           ...Markup.inlineKeyboard([
@@ -23,7 +23,7 @@ const handleWalletMenu = async (ctx) => {
     }
 
     const walletMessage = `
-🦈 **TerminalOne🦈**
+${getBotTitle()}
 
 🟠 **Wallet Management**
 
@@ -70,7 +70,7 @@ const handleCreateWallet = async (ctx) => {
   try {
     // Show creating message
     await ctx.editMessageText(
-      '🦈 **TerminalOne🦈**\n\n🔄 **Creating your new wallet...**\n\n⏳ Please wait...',
+      '${getBotTitle()}\n\n🔄 **Creating your new wallet...**\n\n⏳ Please wait...',
       { parse_mode: 'Markdown' }
     );
 
@@ -79,7 +79,7 @@ const handleCreateWallet = async (ctx) => {
     
     if (result.success) {
       const successMessage = `
-🦈 **TerminalOne🦈**
+${getBotTitle()}
 
 🎉 **Wallet Created Successfully!**
 
@@ -109,7 +109,7 @@ const handleCreateWallet = async (ctx) => {
   } catch (error) {
     console.error('Error creating wallet:', error);
     await ctx.editMessageText(
-      '🦈 **TerminalOne🦈**\n\n❌ **Failed to create wallet**\n\nPlease try again later.',
+      '${getBotTitle()}\n\n❌ **Failed to create wallet**\n\nPlease try again later.',
       {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
@@ -123,7 +123,7 @@ const handleCreateWallet = async (ctx) => {
 
 const handleImportWallet = async (ctx) => {
   await ctx.editMessageText(
-    '🦈 **TerminalOne🦈**\n\n📥 **Import Existing Wallet**\n\n🔐 Send your wallet credentials in the next message\n\n**✅ Supported formats:**\n🌱 **Seed Phrase:** 12 or 24 words\n🔑 **Private Key:** Base64 encoded\n📋 **Private Key:** JSON array [1,2,3...]\n\n**💡 Examples:**\n• `word1 word2 word3 ... word12`\n• `lGJkS4wqjmGGol6ZOFQb7luG...`\n• `[123,45,67,89,12...]`\n\n⚠️ **Security:** All data encrypted & this message auto-deleted',
+    '${getBotTitle()}\n\n📥 **Import Existing Wallet**\n\n🔐 Send your wallet credentials in the next message\n\n**✅ Supported formats:**\n🌱 **Seed Phrase:** 12 or 24 words\n🔑 **Private Key:** Base64 encoded\n📋 **Private Key:** JSON array [1,2,3...]\n\n**💡 Examples:**\n• `word1 word2 word3 ... word12`\n• `lGJkS4wqjmGGol6ZOFQb7luG...`\n• `[123,45,67,89,12...]`\n\n⚠️ **Security:** All data encrypted & this message auto-deleted',
     {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
@@ -145,7 +145,7 @@ const handleViewPrivateKey = async (ctx) => {
     const wallet = walletService.getPrivateKey(userId);
     
     const keyMessage = `
-🦈 **TerminalOne🦈**
+${getBotTitle()}
 
 🔐 **PRIVATE KEY - KEEP SECURE!**
 
@@ -227,7 +227,7 @@ const handleCopyAddress = async (ctx) => {
 
 const handleDeleteWallet = async (ctx) => {
   await ctx.editMessageText(
-    '🦈 **TerminalOne🦈**\n\n🚪 **LOG OFF WALLET**\n\n⚠️ **This will disconnect your current wallet**\n\n• Your wallet will be removed from this device\n• Your funds remain safe in your wallet\n• You can reconnect anytime with your seed phrase\n• Make sure you have your seed phrase saved!\n\n**Ready to log off?**',
+    '${getBotTitle()}\n\n🚪 **LOG OFF WALLET**\n\n⚠️ **This will disconnect your current wallet**\n\n• Your wallet will be removed from this device\n• Your funds remain safe in your wallet\n• You can reconnect anytime with your seed phrase\n• Make sure you have your seed phrase saved!\n\n**Ready to log off?**',
     {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
@@ -247,7 +247,7 @@ const handleConfirmDeleteWallet = async (ctx) => {
     
     if (deleted) {
       await ctx.editMessageText(
-        '🦈 **TerminalOne🦈**\n\n✅ **Wallet Logged Off Successfully**\n\n🚪 Your wallet has been disconnected from this device.\n\n🔒 **Your funds are still safe in your wallet!**\n💡 You can reconnect anytime or use a different wallet.',
+        '${getBotTitle()}\n\n✅ **Wallet Logged Off Successfully**\n\n🚪 Your wallet has been disconnected from this device.\n\n🔒 **Your funds are still safe in your wallet!**\n💡 You can reconnect anytime or use a different wallet.',
         {
           parse_mode: 'Markdown',
           ...Markup.inlineKeyboard([
@@ -282,7 +282,7 @@ const handleRequestAirdrop = async (ctx) => {
     }
 
     const message = `
-🦈 **TerminalOne🦈**
+${getBotTitle()}
 
 💰 **Request Devnet SOL**
 
@@ -326,7 +326,7 @@ const handleExecuteAirdrop = async (ctx, amount) => {
 
     // Show processing message
     await ctx.editMessageText(
-      `🦈 **TerminalOne🦈**\n\n💰 **Requesting ${amount} SOL...**\n\n⏳ Please wait...`,
+      `${getBotTitle()}\n\n💰 **Requesting ${amount} SOL...**\n\n⏳ Please wait...`,
       { parse_mode: 'Markdown' }
     );
 
@@ -339,7 +339,7 @@ const handleExecuteAirdrop = async (ctx, amount) => {
 
     if (result.success) {
       const successMessage = `
-🦈 **TerminalOne🦈**
+${getBotTitle()}
 
 ✅ **Airdrop Successful!**
 
@@ -364,7 +364,7 @@ const handleExecuteAirdrop = async (ctx, amount) => {
     console.error('Airdrop execution error:', error);
     
     await ctx.editMessageText(
-      `🦈 **TerminalOne🦈**\n\n❌ **Airdrop Failed**\n\n${error.message}`,
+      `${getBotTitle()}\n\n❌ **Airdrop Failed**\n\n${error.message}`,
       {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([

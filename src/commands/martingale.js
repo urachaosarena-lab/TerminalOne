@@ -1,5 +1,6 @@
 const { Markup } = require('telegraf');
 const logger = require('../utils/logger');
+const { getBotTitle } = require('../utils/version');
 
 // Default configuration
 const CONFIG_LIMITS = {
@@ -69,7 +70,7 @@ const handleMartingaleMenu = async (ctx) => {
   const userConfig = getUserConfig(ctx, userId);
   
   const message = `
-🦈 **TerminalOne🦈**
+${getBotTitle()}
 
 🤖 **Martingale Bot**
 
@@ -119,7 +120,7 @@ const handleConfigurationMenu = async (ctx) => {
   const maxDrop = (userConfig.dropPercentage * userConfig.maxLevels).toFixed(1);
   
   const message = `
-🦈 **TerminalOne🦈**
+${getBotTitle()}
 
 ⚙️ **Martingale Bot Configuration**
 
@@ -172,7 +173,7 @@ ${generateInvestmentBreakdown(userConfig)}
  */
 const handleLaunchMenu = async (ctx) => {
   const message = `
-🦈 **TerminalOne🦈**
+${getBotTitle()}
 
 🔍 **Token Analysis & Launch**
 
@@ -240,7 +241,7 @@ const handleTokenAnalysis = async (ctx) => {
 
     // Show analysis in progress
     const processingMsg = await ctx.reply(
-      '🦈 **TerminalOne🦈**\n\n🔍 **Analyzing token...**\n\n⏳ Fetching market data, please wait...',
+      '${getBotTitle()}\n\n🔍 **Analyzing token...**\n\n⏳ Fetching market data, please wait...',
       { parse_mode: 'Markdown' }
     );
 
@@ -253,7 +254,7 @@ const handleTokenAnalysis = async (ctx) => {
     const maxInvestment = calculateMaxInvestment(userConfig);
 
     const analysisMessage = `
-🦈 **TerminalOne🦈**
+${getBotTitle()}
 
 ${formatted.header}
 
@@ -295,7 +296,7 @@ ${formatted.volume}
   } catch (error) {
     logger.error(`Token analysis error for ${tokenInput}:`, error);
     
-    let errorMessage = `🦈 **TerminalOne🦈**\n\n❌ **Token Analysis Failed**\n\n`;
+    let errorMessage = `${getBotTitle()}\n\n❌ **Token Analysis Failed**\n\n`;
     let suggestions = [];
     
     if (error.message.includes('not found')) {
@@ -365,7 +366,7 @@ const handleConfirmLaunch = async (ctx) => {
 
     // Show launch confirmation
     const confirmMessage = `
-🦈 **TerminalOne🦈**
+${getBotTitle()}
 
 🚀 **Launch Confirmation**
 
@@ -424,7 +425,7 @@ const handleExecuteLaunch = async (ctx) => {
 
     // Show launching message
     await ctx.editMessageText(
-      '🦈 **TerminalOne🦈**\n\n🚀 **Launching Strategy...**\n\n⏳ Executing initial buy...',
+      '${getBotTitle()}\n\n🚀 **Launching Strategy...**\n\n⏳ Executing initial buy...',
       { parse_mode: 'Markdown' }
     );
 
@@ -432,7 +433,7 @@ const handleExecuteLaunch = async (ctx) => {
     const strategy = await martingaleService.createMartingaleStrategy(userId, strategyConfig);
 
     const successMessage = `
-🦈 **TerminalOne🦈**
+${getBotTitle()}
 
 ✅ **Strategy Launched Successfully!**
 
@@ -462,7 +463,7 @@ const handleExecuteLaunch = async (ctx) => {
 
   } catch (error) {
     await ctx.editMessageText(
-      `🦈 **TerminalOne🦈**\n\n❌ **Launch Failed**\n\n${error.message}`,
+      `${getBotTitle()}\n\n❌ **Launch Failed**\n\n${error.message}`,
       {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
@@ -496,7 +497,7 @@ const handleActiveStrategies = async (ctx) => {
 
   if (active.length === 0) {
     const message = `
-🦈 **TerminalOne🦈**
+${getBotTitle()}
 
 📊 **Active Strategies**
 
@@ -535,7 +536,7 @@ const handleActiveStrategies = async (ctx) => {
   }
   
   const message = `
-🦈 **TerminalOne🦈**
+${getBotTitle()}
 
 📈 **Active Strategies** (${active.length})
 
@@ -607,9 +608,9 @@ const handleViewStrategy = async (ctx) => {
     // Get SOL price for conversion
     const solPrice = await priceService.getSolanaPrice();
     
-    // Calculate proper average buy price (total spent / total tokens)
-    const avgBuyPrice = strategy.totalInvested > 0 && strategy.totalTokens > 0 ?
-      (strategy.totalInvested * solPrice.price) / strategy.totalTokens : 0;
+    // Calculate proper average buy price in USD (use strategy's stored average)
+    // The averageBuyPrice is already in USD per token from the strategy
+    const avgBuyPrice = strategy.averageBuyPrice || currentTokenPrice;
     
     // Calculate current value in SOL: total tokens bought * current price of the token
     const currentValueUSD = strategy.totalTokens * currentTokenPrice;
@@ -620,7 +621,7 @@ const handleViewStrategy = async (ctx) => {
     const currentValue = currentValueSOL; // This is the actual current value
     const profitLoss = currentValueSOL - totalInvested; // P&L = current value - total invested
     
-    // Calculate next buy trigger and sell trigger
+    // Calculate next buy trigger and sell trigger using the token's USD price
     const nextBuyTrigger = avgBuyPrice * (1 - strategy.dropPercentage / 100);
     const sellTrigger = avgBuyPrice * (1 + strategy.profitTarget / 100);
     
@@ -633,7 +634,7 @@ const handleViewStrategy = async (ctx) => {
     };
 
     const message = `
-🦈 **TerminalOne🦈**
+${getBotTitle()}
 
 📊 **${strategy.symbol || 'UNKNOWN'}** Strategy Details
 
@@ -727,7 +728,7 @@ async function sendNewConfigurationMenu(ctx, userId) {
   const maxDrop = (userConfig.dropPercentage * userConfig.maxLevels).toFixed(1);
   
   const message = `
-🦈 **TerminalOne🦈**
+${getBotTitle()}
 
 ⚙️ **Martingale Bot Configuration**
 
@@ -833,7 +834,7 @@ const handleStopStrategy = async (ctx) => {
   const profitLoss = currentValueSOL - netInvested;
   
   const confirmMessage = `
-🦈 **TerminalOne🦈**
+${getBotTitle()}
 
 ⚠️ **Stop Strategy Confirmation**
 
@@ -887,7 +888,7 @@ const handleConfirmStopStrategy = async (ctx) => {
   try {
     // Show stopping message
     await ctx.editMessageText(
-      '🦈 **TerminalOne🦈**\n\n🛑 **Stopping Strategy...**\n\n⏳ Ending monitoring and updating status...',
+      '${getBotTitle()}\n\n🛑 **Stopping Strategy...**\n\n⏳ Ending monitoring and updating status...',
       { parse_mode: 'Markdown' }
     );
 
@@ -953,7 +954,7 @@ const handleConfirmStopStrategy = async (ctx) => {
       `\n🎁 **Loot:** ${rarityEmoji[lootItem.rarity]} ${lootItem.type.toUpperCase()}` : '';
     
     const rewardsMessage = `
-🦈 **TerminalOne🦈**
+${getBotTitle()}
 
 ✅ **Strategy Stopped Successfully**
 
@@ -984,7 +985,7 @@ const handleConfirmStopStrategy = async (ctx) => {
     logger.error(`Error stopping strategy ${strategyId}:`, error);
     
     await ctx.editMessageText(
-      `🦈 **TerminalOne🦈**\n\n❌ **Error Stopping Strategy**\n\n${error.message}\n\n🔄 **You can try again or contact support.**`,
+      `${getBotTitle()}\n\n❌ **Error Stopping Strategy**\n\n${error.message}\n\n🔄 **You can try again or contact support.**`,
       {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
@@ -1055,7 +1056,7 @@ const handleCollectStrategyRewards = async (ctx) => {
       `\n⚠️ **Inventory Full** - Loot could not be added` : '';
     
     const rewardMessage = `
-🦈 **TerminalOne🦈**
+${getBotTitle()}
 
 ✅ **Rewards Collected!**
 
@@ -1108,7 +1109,7 @@ const handleConfigChange = async (ctx, configType) => {
   const label = configLabels[configType];
   
   const message = `
-🦈 **TerminalOne🦈**
+${getBotTitle()}
 
 ⚙️ **Configure ${label}**
 
@@ -1196,7 +1197,7 @@ const handleConfigValueInput = async (ctx) => {
         ctx.chat.id,
         processingMsg.message_id,
         undefined,
-        '🦈 **TerminalOne🦈**\n\n❌ **Invalid Input**\n\n💬 Please enter a valid number',
+        '${getBotTitle()}\n\n❌ **Invalid Input**\n\n💬 Please enter a valid number',
         {
           parse_mode: 'Markdown',
           ...Markup.inlineKeyboard([
@@ -1214,7 +1215,7 @@ const handleConfigValueInput = async (ctx) => {
         ctx.chat.id,
         processingMsg.message_id,
         undefined,
-        `🦈 **TerminalOne🦈**\n\n❌ **Value Out of Range**\n\n📊 **Valid Range:** ${limit.min} - ${limit.max}\n💬 Your input: ${inputValue}`,
+        `${getBotTitle()}\n\n❌ **Value Out of Range**\n\n📊 **Valid Range:** ${limit.min} - ${limit.max}\n💬 Your input: ${inputValue}`,
         {
           parse_mode: 'Markdown',
           ...Markup.inlineKeyboard([
@@ -1255,7 +1256,7 @@ const handleConfigValueInput = async (ctx) => {
       ctx.chat.id,
       processingMsg.message_id,
       undefined,
-      `🦈 **TerminalOne🦈**\n\n✅ **Configuration Updated!**\n\n${configLabels[configType]}\n🔄 **${oldValue}** ➡️ **${inputValue}**\n\n💵 **New Max Investment:** ${newMaxInvestment.toFixed(4)} SOL\n\n✨ **Returning to configuration menu...**`,
+      `${getBotTitle()}\n\n✅ **Configuration Updated!**\n\n${configLabels[configType]}\n🔄 **${oldValue}** ➡️ **${inputValue}**\n\n💵 **New Max Investment:** ${newMaxInvestment.toFixed(4)} SOL\n\n✨ **Returning to configuration menu...**`,
       { parse_mode: 'Markdown' }
     );
     
@@ -1330,7 +1331,7 @@ const handleTradingHistory = async (ctx) => {
     const recentStrategies = historyService.getUserStrategyHistory(userId, { limit: 5 });
     
     let message = `
-🦈 **TerminalOne🦈**
+${getBotTitle()}
 
 📊 **Trading History & Analytics**
 
@@ -1403,7 +1404,7 @@ const handleDetailedAnalytics = async (ctx) => {
     const allTimeAnalytics = historyService.getUserAnalytics(userId, '90d');
     
     const message = `
-🦈 **TerminalOne🦈**
+${getBotTitle()}
 
 📊 **Detailed Performance Analytics**
 

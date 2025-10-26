@@ -285,7 +285,7 @@ class TerminalOneBot {
       }
       
       const message = `
-🦈 **TerminalOne🦈**
+${getBotTitle()}
 
 🤖 **Trading Strategies**
 
@@ -310,7 +310,7 @@ ${balanceInfo}${activeStrategiesInfo}
     // Under construction features
     this.bot.action('grid_web', async (ctx) => {
       const message = `
-🦈 **TerminalOne🦈**
+${getBotTitle()}
 
 🕸️ **Grid Web Trading**
 
@@ -337,7 +337,7 @@ ${balanceInfo}${activeStrategiesInfo}
     
     this.bot.action('yeet_assistant', async (ctx) => {
       const message = `
-🦈 **TerminalOne🦈**
+${getBotTitle()}
 
 🚀 **Yeet Assistant**
 
@@ -400,7 +400,7 @@ ${balanceInfo}${activeStrategiesInfo}
         const importTypeText = result.importType === 'mnemonic' ? 'Seed Phrase' : 'Private Key';
         
         const successMessage = `
-🦈 **TerminalOne🦈**
+${getBotTitle()}
 
 ✅ **Wallet Imported Successfully!**
 
@@ -424,7 +424,7 @@ ${importTypeEmoji} **Import Type:** ${importTypeText}
     } catch (error) {
       logger.error('Error importing wallet:', error);
       await ctx.reply(
-        '🦈 **TerminalOne🦈**\n\n❌ **Failed to import wallet**\n\n' + error.message,
+        '${getBotTitle()}\n\n❌ **Failed to import wallet**\n\n' + error.message,
         {
           parse_mode: 'Markdown',
           ...require('telegraf').Markup.inlineKeyboard([

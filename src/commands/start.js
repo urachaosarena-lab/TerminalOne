@@ -50,7 +50,7 @@ module.exports = async (ctx) => {
     }
 
     const welcomeMessage = `
-🦈 **TerminalOne🦈**
+${getBotTitle()}
 
 🟠 *Your Premium Solana Trading Terminal*
 
@@ -88,7 +88,7 @@ ${balanceInfo.hasWallet ? `\n📍 \`${balanceInfo.publicKey.slice(0,5)}...${bala
     
     // Fallback message if services fail
     const fallbackMessage = `
-🦈 **TerminalOne🦈**
+${getBotTitle()}
 
 🟠 *Your Premium Solana Trading Terminal*
 
