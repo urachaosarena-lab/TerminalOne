@@ -99,6 +99,7 @@ temp/
 wallets/
 keypairs/
 *.json.bak
+data/
 
 # Test files
 test-results/

@@ -2,11 +2,71 @@ const { Keypair, PublicKey } = require('@solana/web3.js');
 const { generateMnemonic, mnemonicToSeedSync } = require('bip39');
 const { derivePath } = require('ed25519-hd-key');
 const logger = require('../utils/logger');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
 
 class WalletService {
   constructor(solanaService) {
     this.solanaService = solanaService;
-    this.userWallets = new Map(); // In production, use encrypted database
+    this.userWallets = new Map();
+    this.walletStoragePath = path.join(__dirname, '../../data/wallets.json');
+    
+    // Ensure data directory exists
+    const dataDir = path.dirname(this.walletStoragePath);
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    
+    // Load existing wallets from file
+    this.loadWalletsFromFile();
+  }
+  
+  /**
+   * Load wallets from persistent storage
+   */
+  loadWalletsFromFile() {
+    try {
+      if (fs.existsSync(this.walletStoragePath)) {
+        const data = fs.readFileSync(this.walletStoragePath, 'utf8');
+        const wallets = JSON.parse(data);
+        
+        // Restore wallets to memory
+        Object.entries(wallets).forEach(([userId, walletData]) => {
+          this.userWallets.set(userId, walletData);
+        });
+        
+        logger.info(`Loaded ${this.userWallets.size} wallets from persistent storage`);
+      } else {
+        logger.info('No existing wallet data found, starting fresh');
+      }
+    } catch (error) {
+      logger.error('Failed to load wallets from file:', error);
+    }
+  }
+  
+  /**
+   * Save wallets to persistent storage
+   */
+  saveWalletsToFile() {
+    try {
+      // Convert Map to object for JSON storage
+      const walletsObject = {};
+      this.userWallets.forEach((wallet, userId) => {
+        walletsObject[userId] = wallet;
+      });
+      
+      // Write to file with proper formatting
+      fs.writeFileSync(
+        this.walletStoragePath,
+        JSON.stringify(walletsObject, null, 2),
+        'utf8'
+      );
+      
+      logger.info(`Saved ${this.userWallets.size} wallets to persistent storage`);
+    } catch (error) {
+      logger.error('Failed to save wallets to file:', error);
+    }
   }
 
   /**
@@ -29,8 +89,11 @@ class WalletService {
         createdAt: new Date().toISOString()
       };
 
-      // Store wallet for user (in production, encrypt this!)
+      // Store wallet for user
       this.userWallets.set(userId, walletData);
+      
+      // Persist to file
+      this.saveWalletsToFile();
 
       logger.info(`Created new wallet for user ${userId}: ${walletData.publicKey}`);
       
@@ -106,6 +169,9 @@ class WalletService {
 
       // Store wallet for user
       this.userWallets.set(userId, walletData);
+      
+      // Persist to file
+      this.saveWalletsToFile();
 
       logger.info(`Imported wallet for user ${userId}: ${walletData.publicKey} (${walletData.importType})`);
       
@@ -180,6 +246,7 @@ class WalletService {
   deleteWallet(userId) {
     const deleted = this.userWallets.delete(userId);
     if (deleted) {
+      this.saveWalletsToFile();
       logger.info(`Deleted wallet for user ${userId}`);
     }
     return deleted;

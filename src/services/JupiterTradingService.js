@@ -127,7 +127,7 @@ class JupiterTradingService {
   /**
    * Execute a buy trade (SOL -> Token)
    */
-  async executeBuy(userId, { tokenAddress, solAmount, maxSlippage = 1 }) {
+  async executeBuy(userId, { tokenAddress, solAmount, maxSlippage = 3 }) {
     return await this.executeWithRetry(async () => {
       const walletData = this.walletService.getUserWallet(userId);
       if (!walletData) {
@@ -210,8 +210,13 @@ class JupiterTradingService {
         'Jupiter Swap Transaction (Buy)',
         userId
       );
-      if (!swapTransaction) {
-        throw new Error('Unable to get swap transaction from Jupiter');
+      if (!swapTransaction || !swapTransaction.swapTransaction) {
+        logger.error('Invalid Jupiter swap transaction response:', { 
+          swapTransaction, 
+          tokenAddress, 
+          netAmount: netSolAmount 
+        });
+        throw new Error('Unable to get swap transaction from Jupiter. Please try again or increase slippage.');
       }
 
       // Collect platform fee first
@@ -261,7 +266,7 @@ class JupiterTradingService {
   /**
    * Execute a sell trade (Token -> SOL)
    */
-  async executeSell(userId, { tokenAddress, tokenAmount, maxSlippage = 1 }) {
+  async executeSell(userId, { tokenAddress, tokenAmount, maxSlippage = 3 }) {
     return await this.executeWithRetry(async () => {
       const walletData = this.walletService.getUserWallet(userId);
       if (!walletData) {
