@@ -13,6 +13,8 @@ const TradingHistoryService = require('./services/TradingHistoryService');
 const ErrorHandlingService = require('./services/ErrorHandlingService');
 const RateLimitService = require('./services/RateLimitService');
 const MonitoringService = require('./services/MonitoringService');
+const { HeroService } = require('./services/HeroService');
+const BattleService = require('./services/BattleService');
 const { createHealthCheckServer } = require('./utils/healthCheck');
 
 // Import command handlers
@@ -20,6 +22,8 @@ const startCommand = require('./commands/start');
 const helpCommand = require('./commands/help');
 const walletHandlers = require('./commands/wallet');
 const martingaleHandlers = require('./commands/martingale');
+const heroHandlers = require('./commands/hero');
+const battleHandlers = require('./commands/battle');
 
 class TerminalOneBot {
   constructor() {
@@ -50,6 +54,10 @@ class TerminalOneBot {
       this.revenueService, // revenue service for fee collection
       this.tradingHistoryService // trading history service for analytics
     );
+    
+    // RPG Game services
+    this.heroService = new HeroService();
+    this.battleService = new BattleService(this.heroService);
     
     // Make services available to bot context (deprecated - use middleware)
     this.bot.solanaService = this.solanaService;
@@ -99,7 +107,9 @@ class TerminalOneBot {
         tradingHistory: this.tradingHistoryService,
         errorHandling: this.errorHandlingService,
         rateLimit: this.rateLimitService,
-        monitoring: this.monitoringService
+        monitoring: this.monitoringService,
+        hero: this.heroService,
+        battle: this.battleService
       };
       return next();
     });
@@ -187,6 +197,39 @@ class TerminalOneBot {
     this.bot.action('martingale_history', martingaleHandlers.handleTradingHistory);
     this.bot.action('history_analytics', martingaleHandlers.handleDetailedAnalytics);
     this.bot.action('history_export', martingaleHandlers.handleExportReport);
+    
+    // Hero/RPG callbacks
+    this.bot.action('hero_menu', heroHandlers.handleHeroMenu);
+    this.bot.action('hero_profile', heroHandlers.handleProfile);
+    this.bot.action('hero_battle_menu', heroHandlers.handleBattleMenu);
+    this.bot.action('hero_inventory', heroHandlers.handleInventory);
+    this.bot.action('stat_strength', async (ctx) => {
+      ctx.services.hero.spendStat(ctx.from.id, 'strength');
+      await heroHandlers.handleProfile(ctx);
+    });
+    this.bot.action('stat_wisdom', async (ctx) => {
+      ctx.services.hero.spendStat(ctx.from.id, 'wisdom');
+      await heroHandlers.handleProfile(ctx);
+    });
+    this.bot.action('stat_luck', async (ctx) => {
+      ctx.services.hero.spendStat(ctx.from.id, 'luck');
+      await heroHandlers.handleProfile(ctx);
+    });
+    this.bot.action('fuse_common', async (ctx) => {
+      const success = ctx.services.hero.fuseItems(ctx.from.id, 'common');
+      await ctx.answerCbQuery(success ? '🔀 Fused 5 commons into 1 rare!' : '❌ Need 5 common items');
+      await heroHandlers.handleInventory(ctx);
+    });
+    this.bot.action('fuse_rare', async (ctx) => {
+      const success = ctx.services.hero.fuseItems(ctx.from.id, 'rare');
+      await ctx.answerCbQuery(success ? '🔀 Fused 5 rares into 1 legendary!' : '❌ Need 5 rare items');
+      await heroHandlers.handleInventory(ctx);
+    });
+    
+    // Battle callbacks
+    this.bot.action('battle_start', battleHandlers.handleStartBattle);
+    this.bot.action(/ability_(\d+)/, battleHandlers.handleSelectAbility);
+    this.bot.action('battle_flee', battleHandlers.handleFleeBattle);
     
     // Placeholder callbacks for future features
     this.bot.action('portfolio', (ctx) => {
