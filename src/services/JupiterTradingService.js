@@ -265,14 +265,7 @@ class JupiterTradingService {
       }
       throw new Error(result.error);
 
-    }, `Buy Trade (${tokenAddress})`, userId).catch(error => {
-      logger.error(`Buy trade failed for user ${userId}:`, error);
-      return {
-        success: false,
-        error: error.message,
-        timestamp: new Date()
-      };
-    });
+    }, `Buy Trade (${tokenAddress})`, userId);
   }
 
   /**
@@ -382,14 +375,7 @@ class JupiterTradingService {
         throw new Error(result.error);
       }
 
-    }, `Sell Trade (${tokenAddress})`, userId).catch(error => {
-      logger.error(`Sell trade failed for user ${userId}:`, error);
-      return {
-        success: false,
-        error: error.message,
-        timestamp: new Date()
-      };
-    });
+    }, `Sell Trade (${tokenAddress})`, userId);
   }
 
   /**
