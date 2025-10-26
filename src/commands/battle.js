@@ -1,30 +1,37 @@
 const { Markup } = require('telegraf');
 
 const displayBattle = (battle) => {
-  const team = battle.team.map((f, i) => {
+  // Display enemies at top
+  const enemies = battle.enemies.map((f) => {
+    const dead = f.hp <= 0 ? '💀' : '';
     const hpBar = '█'.repeat(Math.max(0, Math.floor(f.hp / 10))) + '░'.repeat(Math.max(0, 10 - Math.floor(f.hp / 10)));
-    const effects = f.effects.map(e => e.type === 'stun' ? '✨' : e.type === 'bleed' ? '🩸' : '').join('');
-    return `${f.name} ${effects}\\n${hpBar} ${f.hp}/${f.maxHp}HP${f.shield > 0 ? ` 🛡️${f.shield}` : ''}`;
-  }).join('\\n\\n');
+    const lastAction = f.lastAction || '';
+    return `${dead}${f.name} | ${hpBar} ${f.hp}/${f.maxHp}HP | ${lastAction}`;
+  }).join('\n');
 
-  const enemies = battle.enemies.map((f, i) => {
+  // Environment separator
+  const environment = '🌲🏞️🌳⛰️🌴🏞️🌲⛰️🌳🏞️🌲⛰️🌳';
+
+  // Display team at bottom
+  const team = battle.team.map((f) => {
+    const dead = f.hp <= 0 ? '💀' : '';
     const hpBar = '█'.repeat(Math.max(0, Math.floor(f.hp / 10))) + '░'.repeat(Math.max(0, 10 - Math.floor(f.hp / 10)));
-    const effects = f.effects.map(e => e.type === 'stun' ? '✨' : e.type === 'bleed' ? '🩸' : '').join('');
-    return `${f.name} ${effects}\\n${hpBar} ${f.hp}/${f.maxHp}HP`;
-  }).join('\\n\\n');
+    const lastAction = f.lastAction || '';
+    return `${dead}${f.name} | ${hpBar} ${f.hp}/${f.maxHp}HP | ${lastAction}`;
+  }).join('\n');
 
   return `
-🦈**TerminalOne🦈v0.04**
+🦈**TerminalOne🦈v0.05**
 
 ⚔️ **Battle - Turn ${battle.turn}**
 
-**Your Team:**
-${team}
-
-━━━━━━━━━━━━━━━
-
 **Enemies:**
 ${enemies}
+
+${environment}
+
+**TerminalOne Team:**
+${team}
 `;
 };
 
@@ -104,21 +111,36 @@ const displayBattleTurn = async (ctx, battle) => {
 };
 
 const displayBattleEnd = async (ctx, battle) => {
-  const log = battle.battleLog.join('\\n');
-  
   let message = `
-🦈**TerminalOne🦈v0.04**
+🦈**TerminalOne🦈v0.05**
 
 ⚔️ **Battle Complete!**
 
-${log}
+${battle.won ? '🎉 **VICTORY!**' : '💀 **DEFEAT...**'}
 
 **Final Stats:**
 💥 Damage Dealt: ${battle.totalDamageDealt}
 🛡️ Damage Taken: ${battle.totalDamageTaken}
 `;
 
-  const buttons = [[Markup.button.callback('🔙 Battle Menu', 'hero_battle_menu')]];
+  if (battle.won && battle.rewards) {
+    message += `
+
+🎁 **Rewards:**
+• +${battle.rewards.xp} XP
+• +${battle.rewards.currency} 💎S`;
+    
+    if (battle.rewards.item) {
+      const rarityEmoji = battle.rewards.item.rarity === 'common' ? '⚪' : 
+                          battle.rewards.item.rarity === 'rare' ? '🔵' : '🟠';
+      message += `
+• ${rarityEmoji} ${battle.rewards.item.id} ${battle.rewards.item.type}`;
+    }
+  }
+
+  const buttons = battle.won ? 
+    [[Markup.button.callback('🎁 Collect Rewards', 'battle_collect')]] :
+    [[Markup.button.callback('🔙 Battle Menu', 'hero_battle_menu')]];
 
   await ctx.editMessageText(message, {
     parse_mode: 'Markdown',
@@ -141,8 +163,16 @@ const handleFleeBattle = async (ctx) => {
   });
 };
 
+const handleCollectRewards = async (ctx) => {
+  await ctx.answerCbQuery('🎁 Rewards collected!');
+  await ctx.editMessageText('✅ Rewards collected! Check your Hero profile.', {
+    ...Markup.inlineKeyboard([[Markup.button.callback('🔙 Battle Menu', 'hero_battle_menu')]])
+  });
+};
+
 module.exports = {
   handleStartBattle,
   handleSelectAbility,
-  handleFleeBattle
+  handleFleeBattle,
+  handleCollectRewards
 };

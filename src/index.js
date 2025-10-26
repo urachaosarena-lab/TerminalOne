@@ -230,6 +230,7 @@ class TerminalOneBot {
     this.bot.action('battle_start', battleHandlers.handleStartBattle);
     this.bot.action(/ability_(\d+)/, battleHandlers.handleSelectAbility);
     this.bot.action('battle_flee', battleHandlers.handleFleeBattle);
+    this.bot.action('battle_collect', battleHandlers.handleCollectRewards);
     
     // Placeholder callbacks for future features
     this.bot.action('portfolio', (ctx) => {

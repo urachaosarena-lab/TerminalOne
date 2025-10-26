@@ -235,14 +235,13 @@ class BattleService {
       }
 
       target.hp = Math.max(0, target.hp - damage);
+      target.lastAction = `Attacked by ${attacker.name} doing ${damage}dmg`;
       
       if (attacker.userId) {
         battle.totalDamageDealt += damage;
       } else if (target.userId) {
         battle.totalDamageTaken += damage;
       }
-
-      battle.battleLog.push(`${attacker.name} used ${ability.name}! → ${target.name} -${damage}HP ${target.hp > 0 ? `(${target.hp}HP)` : '💀'}`);
     });
   }
 
@@ -256,9 +255,7 @@ class BattleService {
         const chance = ability.chance + wisdomBonus;
         if (Math.random() < chance) {
           target.effects.push({ type: 'stun', duration: 1 });
-          battle.battleLog.push(`${attacker.name} stunned ${target.name}! ✨`);
-        } else {
-          battle.battleLog.push(`${attacker.name} missed the stun!`);
+          target.lastAction = `Attacked by ${attacker.name} Stunned ✨`;
         }
       }
     } else if (ability.effect === 'bleed') {
@@ -268,12 +265,10 @@ class BattleService {
         const chance = ability.chance + wisdomBonus;
         if (Math.random() < chance) {
           target.effects.push({ type: 'bleed', duration: 3, damage: 10 });
-          battle.battleLog.push(`${attacker.name} applied bleed to ${target.name}! 🩸`);
-        } else {
-          battle.battleLog.push(`${attacker.name} missed the bleed!`);
+          target.lastAction = `Attacked by ${attacker.name} Bleeding 🩸`;
         }
       }
-    } else if (ability.effect === 'heal') {
+    }
       allies.forEach(ally => {
         if (ally.hp > 0 && ally.hp < ally.maxHp) {
           const heal = ability.value;

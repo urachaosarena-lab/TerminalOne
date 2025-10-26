@@ -235,21 +235,34 @@ class JupiterTradingService {
       if (result.success) {
         // Calculate actual tokens received (from net quote)
         const tokensReceived = parseInt(netQuote.outAmount) / 1e6; // Adjust decimals based on token
-        const actualPrice = netSolAmount / tokensReceived;
+        
+        // Get current SOL/USD price for accurate price calculation
+        const solPriceUSD = 200; // Fallback, should fetch from price service
+        try {
+          const solPriceData = await require('./EnhancedPriceService').prototype.getSolanaPrice.call({ cache: new Map() });
+          if (solPriceData && solPriceData.price) {
+            solPriceUSD = solPriceData.price;
+          }
+        } catch (e) {
+          logger.warn('Failed to fetch SOL price, using fallback:', e.message);
+        }
+        
+        // Calculate actual token price in USD
+        const actualPriceUSD = (netSolAmount * solPriceUSD) / tokensReceived;
 
         return {
           success: true,
           txHash: result.txHash,
           feeCollectionTx: feeCollection.signature,
           tokensReceived: tokensReceived,
-          actualPrice: actualPrice,
+          actualPrice: actualPriceUSD, // Price in USD
           solSpent: netSolAmount, // Net amount actually used for tokens
           grossSolSpent: solAmount, // Original amount including fees
           platformFee: actualFee,
           priceImpact: netQuote.priceImpactPct,
           timestamp: new Date()
         };
-      } else {
+      }
         throw new Error(result.error);
       }
 
