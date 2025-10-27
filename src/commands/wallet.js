@@ -1,4 +1,5 @@
 const { Markup } = require('telegraf');
+const { getBotTitle } = require('../utils/version');
 
 const handleWalletMenu = async (ctx) => {
   const walletService = ctx.services?.wallet;
@@ -9,7 +10,7 @@ const handleWalletMenu = async (ctx) => {
     
     if (!balanceInfo.hasWallet) {
       await ctx.editMessageText(
-        '${getBotTitle()}\n\n❌ No wallet found. Please create or import a wallet first.',
+        `${getBotTitle()}\n\n❌ No wallet found. Please create or import a wallet first.`,
         {
           parse_mode: 'Markdown',
           ...Markup.inlineKeyboard([
@@ -70,7 +71,7 @@ const handleCreateWallet = async (ctx) => {
   try {
     // Show creating message
     await ctx.editMessageText(
-      '${getBotTitle()}\n\n🔄 **Creating your new wallet...**\n\n⏳ Please wait...',
+      `${getBotTitle()}\n\n🔄 **Creating your new wallet...**\n\n⏳ Please wait...`,
       { parse_mode: 'Markdown' }
     );
 
@@ -109,7 +110,7 @@ ${getBotTitle()}
   } catch (error) {
     console.error('Error creating wallet:', error);
     await ctx.editMessageText(
-      '${getBotTitle()}\n\n❌ **Failed to create wallet**\n\nPlease try again later.',
+      `${getBotTitle()}\n\n❌ **Failed to create wallet**\n\nPlease try again later.`,
       {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
@@ -123,7 +124,7 @@ ${getBotTitle()}
 
 const handleImportWallet = async (ctx) => {
   await ctx.editMessageText(
-    '${getBotTitle()}\n\n📥 **Import Existing Wallet**\n\n🔐 Send your wallet credentials in the next message\n\n**✅ Supported formats:**\n🌱 **Seed Phrase:** 12 or 24 words\n🔑 **Private Key:** Base64 encoded\n📋 **Private Key:** JSON array [1,2,3...]\n\n**💡 Examples:**\n• `word1 word2 word3 ... word12`\n• `lGJkS4wqjmGGol6ZOFQb7luG...`\n• `[123,45,67,89,12...]`\n\n⚠️ **Security:** All data encrypted & this message auto-deleted',
+    `${getBotTitle()}\n\n📥 **Import Existing Wallet**\n\n🔐 Send your wallet credentials in the next message\n\n**✅ Supported formats:**\n🌱 **Seed Phrase:** 12 or 24 words\n🔑 **Private Key:** Base64 encoded\n📋 **Private Key:** JSON array [1,2,3...]\n\n**💡 Examples:**\n• \`word1 word2 word3 ... word12\`\n• \`lGJkS4wqjmGGol6ZOFQb7luG...\`\n• \`[123,45,67,89,12...]\`\n\n⚠️ **Security:** All data encrypted & this message auto-deleted`,
     {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([

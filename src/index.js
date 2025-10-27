@@ -16,6 +16,7 @@ const MonitoringService = require('./services/MonitoringService');
 const { HeroService } = require('./services/HeroService');
 const BattleService = require('./services/BattleService');
 const { createHealthCheckServer } = require('./utils/healthCheck');
+const { getBotTitle } = require('./utils/version');
 
 // Import command handlers
 const startCommand = require('./commands/start');
@@ -424,7 +425,7 @@ ${importTypeEmoji} **Import Type:** ${importTypeText}
     } catch (error) {
       logger.error('Error importing wallet:', error);
       await ctx.reply(
-        '${getBotTitle()}\n\n❌ **Failed to import wallet**\n\n' + error.message,
+        `${getBotTitle()}\n\n❌ **Failed to import wallet**\n\n${error.message}`,
         {
           parse_mode: 'Markdown',
           ...require('telegraf').Markup.inlineKeyboard([

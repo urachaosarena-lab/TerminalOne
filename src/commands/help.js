@@ -1,4 +1,5 @@
 const { Markup } = require('telegraf');
+const { getBotTitle } = require('../utils/version');
 
 module.exports = async (ctx) => {
   const helpMessage = `
