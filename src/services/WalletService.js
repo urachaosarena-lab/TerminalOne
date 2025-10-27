@@ -92,7 +92,10 @@ class WalletService {
    * Create a new wallet for user
    */
   async createWallet(userId) {
-    try {
+    // Ensure userId is string for consistency
+    userId = String(userId);
+    
+    try{
       // Generate mnemonic phrase
       const mnemonic = generateMnemonic();
       
@@ -131,6 +134,9 @@ class WalletService {
    * Import wallet from private key or seed phrase
    */
   async importWallet(userId, input) {
+    // Ensure userId is string for consistency
+    userId = String(userId);
+    
     try {
       let keypair;
       let importedMnemonic = null;
@@ -210,6 +216,8 @@ class WalletService {
    * Get user's wallet
    */
   getUserWallet(userId) {
+    // Ensure userId is string for consistency
+    userId = String(userId);
     return this.userWallets.get(userId) || null;
   }
 
@@ -217,6 +225,8 @@ class WalletService {
    * Get wallet balance
    */
   async getWalletBalance(userId) {
+    // Ensure userId is string for consistency
+    userId = String(userId);
     const wallet = this.getUserWallet(userId);
     if (!wallet) {
       return { balance: 0, hasWallet: false };
@@ -239,6 +249,8 @@ class WalletService {
    * Get private key for user (use with caution!)
    */
   getPrivateKey(userId) {
+    // Ensure userId is string for consistency
+    userId = String(userId);
     const wallet = this.getUserWallet(userId);
     if (!wallet) {
       throw new Error('No wallet found for user');
@@ -256,6 +268,8 @@ class WalletService {
    * Check if user has a wallet
    */
   hasWallet(userId) {
+    // Ensure userId is string for consistency
+    userId = String(userId);
     return this.userWallets.has(userId);
   }
 
@@ -263,6 +277,8 @@ class WalletService {
    * Delete user wallet
    */
   deleteWallet(userId) {
+    // Ensure userId is string for consistency
+    userId = String(userId);
     const deleted = this.userWallets.delete(userId);
     if (deleted) {
       this.saveWalletsToFile();
