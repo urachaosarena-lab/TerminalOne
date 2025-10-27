@@ -26,10 +26,12 @@ const handleWalletMenu = async (ctx) => {
     const walletMessage = `
 ${getBotTitle()}
 
-🟠 **Wallet Management**
+🔠 **Wallet Management**
 
 💰 **Balance:** ${balanceInfo.balance.toFixed(4)} SOL
-📍 **Address:** \`${balanceInfo.publicKey.slice(0,5)}...${balanceInfo.publicKey.slice(-5)}\`
+📋 **Address:** \`${balanceInfo.publicKey.slice(0,5)}...${balanceInfo.publicKey.slice(-5)}\`
+
+⚠️ **SAVE YOUR KEY! Server hard-restarts may log off your wallet** ⚠️
 
 🔐 **Manage your wallet securely**
     `;
@@ -85,13 +87,15 @@ ${getBotTitle()}
 🎉 **Wallet Created Successfully!**
 
 🟢 **Your new wallet is ready:**
-📍 **Address:** \`${result.publicKey.slice(0,5)}...${result.publicKey.slice(-5)}\`
+📋 **Address:** \`${result.publicKey.slice(0,5)}...${result.publicKey.slice(-5)}\`
 
 ⚠️ **IMPORTANT SECURITY NOTICE:**
 • Your private key is stored securely
 • Always backup your wallet
 • Never share your private key
 • You are responsible for your funds
+
+⚠️ **SAVE YOUR KEY! Server hard-restarts may log off your wallet** ⚠️
 
 💰 **Your wallet balance:** 0.0000 SOL
 💡 **Tip:** Fund your wallet to start trading!
@@ -124,7 +128,7 @@ ${getBotTitle()}
 
 const handleImportWallet = async (ctx) => {
   await ctx.editMessageText(
-    `${getBotTitle()}\n\n📥 **Import Existing Wallet**\n\n🔐 Send your wallet credentials in the next message\n\n**✅ Supported formats:**\n🌱 **Seed Phrase:** 12 or 24 words\n🔑 **Private Key:** Base64 encoded\n📋 **Private Key:** JSON array [1,2,3...]\n\n**💡 Examples:**\n• \`word1 word2 word3 ... word12\`\n• \`lGJkS4wqjmGGol6ZOFQb7luG...\`\n• \`[123,45,67,89,12...]\`\n\n⚠️ **Security:** All data encrypted & this message auto-deleted`,
+    `${getBotTitle()}\n\n📥 **Import Existing Wallet**\n\n🔐 Send your wallet credentials in the next message\n\n**✅ Supported formats:**\n🌱 **Seed Phrase:** 12 or 24 words\n🔑 **Private Key:** Base64 encoded\n📋 **Private Key:** JSON array [1,2,3...]\n\n**💡 Examples:**\n• \`word1 word2 word3 ... word12\`\n• \`lGJkS4wqjmGGol6ZOFQb7luG...\`\n• \`[123,45,67,89,12...]\`\n\n⚠️ **SAVE YOUR KEY! Server hard-restarts may log off your wallet** ⚠️\n\n⚠️ **Security:** All data encrypted & this message auto-deleted`,
     {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([

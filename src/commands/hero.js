@@ -15,7 +15,7 @@ const handleHeroMenu = async (ctx) => {
   heroService.rechargeEnergy(userId);
 
   const message = `
-🦈**TerminalOne🦈v0.04**
+${getBotTitle()}
 
 ⚔️ **Hero RPG Game**
 
@@ -67,7 +67,7 @@ const handleProfile = async (ctx) => {
   const equippedPet = hero.equipped.pet ? `${hero.equipped.pet} ${PETS[hero.equipped.pet].name}` : '❌ None';
 
   const message = `
-🦈**TerminalOne🦈v0.04**
+${getBotTitle()}
 
 👤 **Hero Profile**
 
@@ -122,7 +122,7 @@ const handleBattleMenu = async (ctx) => {
   const winRate = hero.stats.totalBattles > 0 ? ((hero.stats.won / hero.stats.totalBattles) * 100).toFixed(1) : 0;
 
   const message = `
-🦈**TerminalOne🦈v0.04**
+${getBotTitle()}
 
 ⚔️ **Battle Arena**
 
@@ -182,7 +182,7 @@ const handleInventory = async (ctx) => {
   }
 
   const message = `
-🦈**TerminalOne🦈v0.04**
+${getBotTitle()}
 
 🎒 **Inventory** (${hero.inventory.length}/${hero.maxInventory})
 

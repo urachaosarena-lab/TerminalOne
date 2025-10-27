@@ -85,6 +85,9 @@ class MartingaleStrategy {
    * Create a new Martingale Long strategy
    */
   async createMartingaleStrategy(userId, config) {
+    // Ensure userId is string for consistency
+    userId = String(userId);
+    
     // Validate configuration
     const validation = this.validateConfig(config);
     if (!validation.valid) {
@@ -920,6 +923,8 @@ class MartingaleStrategy {
    * Get user strategies
    */
   getUserStrategies(userId) {
+    // Ensure userId is string for consistency
+    userId = String(userId);
     return this.activeStrategies.get(userId) || [];
   }
 

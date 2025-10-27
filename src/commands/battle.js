@@ -22,7 +22,7 @@ const displayBattle = (battle) => {
   }).join('\n');
 
   return `
-🦈**TerminalOne🦈v0.05**
+${getBotTitle()}
 
 ⚔️ **Battle - Turn ${battle.turn}**
 
@@ -113,7 +113,7 @@ const displayBattleTurn = async (ctx, battle) => {
 
 const displayBattleEnd = async (ctx, battle) => {
   let message = `
-🦈**TerminalOne🦈v0.05**
+${getBotTitle()}
 
 ⚔️ **Battle Complete!**
 
