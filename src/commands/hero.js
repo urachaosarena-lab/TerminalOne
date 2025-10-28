@@ -98,7 +98,7 @@ ${hero.unspentPoints > 0 ? `✨ **Unspent Points:** ${hero.unspentPoints}` : ''}
 • Strategies: ${hero.stats.strategiesOpened} opened, ${hero.stats.strategiesClosed} closed
   `;
 
-  const buttons = [[Markup.button.callback('🔙 Back', 'hero_menu')]];
+  const buttons = [[Markup.button.callback('🔙 Back', 'hero_menu'), Markup.button.callback('🏠 Main Menu', 'back_to_main')]];
   
   if (hero.unspentPoints > 0) {
     buttons.unshift(
@@ -144,7 +144,7 @@ ${hero.energy > 0 ? '⚔️ Ready to battle!' : '⏰ Energy recharges 1/hour'}
     parse_mode: 'Markdown',
     ...Markup.inlineKeyboard([
       [Markup.button.callback('🧟 Start PvE Battle', 'battle_start')],
-      [Markup.button.callback('🔙 Back', 'hero_menu')]
+      [Markup.button.callback('🔙 Back', 'hero_menu'), Markup.button.callback('🏠 Main Menu', 'back_to_main')]
     ])
   });
 };
@@ -196,23 +196,252 @@ ${getBotTitle()}
 
 **Items:**
 ${itemsList}
-
-**Actions:**
-• Sell items for 💎S (15/30/60)
-• Fuse 5 commons → 1 rare
-• Fuse 5 rares → 1 legendary
   `;
 
-  const buttons = [[Markup.button.callback('💰 Manage Items', 'inventory_manage')]];
-  
-  if (commonCount >= 5) {
-    buttons.push([Markup.button.callback('🔀 Fuse Commons (5→1 Rare)', 'fuse_common')]);
-  }
-  if (rareCount >= 5) {
-    buttons.push([Markup.button.callback('🔀 Fuse Rares (5→1 Legendary)', 'fuse_rare')]);
+  await ctx.editMessageText(message, {
+    parse_mode: 'Markdown',
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback('🎽 Equip', 'inventory_equip'), Markup.button.callback('🔀 Fuse', 'inventory_fuse')],
+      [Markup.button.callback('💰 Sell', 'inventory_sell'), Markup.button.callback('🛒 Shop', 'inventory_shop')],
+      [Markup.button.callback('🔙 Back', 'hero_menu'), Markup.button.callback('🏠 Main Menu', 'back_to_main')]
+    ])
+  });
+};
+
+// EQUIP SYSTEM
+const handleInventoryEquip = async (ctx) => {
+  const message = `
+${getBotTitle()}
+
+🎽 **Equip Items**
+
+Select item type to equip:
+  `;
+
+  await ctx.editMessageText(message, {
+    parse_mode: 'Markdown',
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback('👤 Classes', 'equip_class')],
+      [Markup.button.callback('⚔️ Weapons', 'equip_weapon')],
+      [Markup.button.callback('🐾 Pets', 'equip_pet')],
+      [Markup.button.callback('🔙 Back', 'hero_inventory')]
+    ])
+  });
+};
+
+const handleEquipType = async (ctx, type) => {
+  const userId = ctx.from.id;
+  const heroService = ctx.services.hero;
+  const hero = heroService.getHero(userId);
+
+  const typeNames = { class: '👤 Classes', weapon: '⚔️ Weapons', pet: '🐾 Pets' };
+  const items = hero.inventory.filter(i => i.type === type)
+    .sort((a, b) => {
+      const rarityOrder = { legendary: 0, rare: 1, common: 2 };
+      return rarityOrder[a.rarity] - rarityOrder[b.rarity];
+    });
+
+  if (items.length === 0) {
+    await ctx.answerCbQuery(`No ${type}s available!`);
+    return;
   }
 
-  buttons.push([Markup.button.callback('🔙 Back', 'hero_menu')]);
+  const rarityEmoji = { common: '⚪', rare: '🔵', legendary: '🟠' };
+  const itemList = items.slice(0, 10).map((item, idx) => {
+    const name = type === 'class' ? CLASSES[item.id].name :
+                 type === 'weapon' ? WEAPONS[item.id].name :
+                 PETS[item.id].name;
+    return `${rarityEmoji[item.rarity]} ${idx + 1}. ${item.id} ${name}`;
+  }).join('\\n');
+
+  const message = `
+${getBotTitle()}
+
+${typeNames[type]}
+
+**Available items:**
+${itemList}
+${items.length > 10 ? `\\n... and ${items.length - 10} more` : ''}
+
+${hero.equipped[type] ? `\\n**Currently equipped:** ${hero.equipped[type]}` : ''}
+  `;
+
+  const buttons = [];
+  items.slice(0, 10).forEach((_, idx) => {
+    if (idx % 2 === 0) {
+      buttons.push([
+        Markup.button.callback(`${idx + 1}`, `equip_do_${type}_${idx}`),
+        items[idx + 1] ? Markup.button.callback(`${idx + 2}`, `equip_do_${type}_${idx + 1}`) : null
+      ].filter(Boolean));
+    }
+  });
+
+  if (hero.equipped[type]) {
+    buttons.push([Markup.button.callback('🔓 Unequip', `unequip_${type}`)]);
+  }
+  
+  buttons.push([Markup.button.callback('🔙 Back', 'inventory_equip')]);
+
+  await ctx.editMessageText(message, {
+    parse_mode: 'Markdown',
+    ...Markup.inlineKeyboard(buttons)
+  });
+};
+
+// FUSE SYSTEM
+const handleInventoryFuse = async (ctx) => {
+  const userId = ctx.from.id;
+  const heroService = ctx.services.hero;
+  const hero = heroService.getHero(userId);
+
+  // Find fuseable items
+  const grouped = {};
+  hero.inventory.forEach(item => {
+    if (item.rarity === 'legendary') return;
+    const key = `${item.type}_${item.id}_${item.rarity}`;
+    if (!grouped[key]) grouped[key] = { count: 0, item };
+    grouped[key].count++;
+  });
+
+  const fuseable = Object.values(grouped).filter(g => g.count >= 5);
+
+  const message = `
+${getBotTitle()}
+
+🔀 **Fuse Items**
+
+${fuseable.length > 0 ? '**Fuseable items (5+ of same):**' : '⚠️ No fuseable items!\\nNeed 5+ identical items'}
+
+${fuseable.length > 0 ? fuseable.map(g => {
+  const rarityEmoji = { common: '⚪', rare: '🔵' };
+  const name = g.item.type === 'class' ? CLASSES[g.item.id].name :
+               g.item.type === 'weapon' ? WEAPONS[g.item.id].name :
+               PETS[g.item.id].name;
+  return `${rarityEmoji[g.item.rarity]} ${g.item.id} ${name} (${g.count})`;
+}).join('\\n') : ''}
+
+**Fusion rules:**
+• 5 Common → 1 Rare
+• 5 Rare → 1 Legendary
+  `;
+
+  const buttons = [];
+  if (fuseable.length > 0) {
+    buttons.push([Markup.button.callback('✨ Auto-Fuse All', 'fuse_auto')]);
+  }
+  buttons.push([Markup.button.callback('🔙 Back', 'hero_inventory')]);
+
+  await ctx.editMessageText(message, {
+    parse_mode: 'Markdown',
+    ...Markup.inlineKeyboard(buttons)
+  });
+};
+
+// SELL SYSTEM
+const handleInventorySell = async (ctx) => {
+  const userId = ctx.from.id;
+  const heroService = ctx.services.hero;
+  const hero = heroService.getHero(userId);
+
+  if (hero.inventory.length === 0) {
+    await ctx.answerCbQuery('No items to sell!');
+    return;
+  }
+
+  const rarityEmoji = { common: '⚪', rare: '🔵', legendary: '🟠' };
+  const items = hero.inventory.slice(0, 10);
+  
+  const itemList = items.map((item, idx) => {
+    const name = item.type === 'class' ? CLASSES[item.id].name :
+                 item.type === 'weapon' ? WEAPONS[item.id].name :
+                 PETS[item.id].name;
+    const isPet = item.type === 'pet';
+    const prices = {
+      common: isPet ? 50 : 25,
+      rare: isPet ? 500 : 250,
+      legendary: isPet ? 5000 : 2500
+    };
+    return `${rarityEmoji[item.rarity]} ${idx + 1}. ${item.id} ${name} (${prices[item.rarity]}💎)`;
+  }).join('\\n');
+
+  const message = `
+${getBotTitle()}
+
+💰 **Sell Items**
+
+💎 **Your Currency:** ${hero.currency} S
+
+**Items:**
+${itemList}
+${hero.inventory.length > 10 ? `\\n... and ${hero.inventory.length - 10} more` : ''}
+
+**Prices:**
+⚪ Class/Weapon: 25 | Pet: 50
+🔵 Class/Weapon: 250 | Pet: 500
+🟠 Class/Weapon: 2500 | Pet: 5000
+  `;
+
+  const buttons = [];
+  items.forEach((_, idx) => {
+    if (idx % 2 === 0) {
+      buttons.push([
+        Markup.button.callback(`${idx + 1}`, `sell_do_${idx}`),
+        items[idx + 1] ? Markup.button.callback(`${idx + 2}`, `sell_do_${idx + 1}`) : null
+      ].filter(Boolean));
+    }
+  });
+  
+  buttons.push([Markup.button.callback('🔙 Back', 'hero_inventory')]);
+
+  await ctx.editMessageText(message, {
+    parse_mode: 'Markdown',
+    ...Markup.inlineKeyboard(buttons)
+  });
+};
+
+// SHOP SYSTEM
+const handleInventoryShop = async (ctx) => {
+  const userId = ctx.from.id;
+  const heroService = ctx.services.hero;
+  const hero = heroService.getHero(userId);
+  const shop = heroService.getShopItems(userId);
+
+  const rarityEmoji = { common: '⚪', rare: '🔵', legendary: '🟠' };
+  
+  const shopList = shop.map((item, idx) => {
+    const name = item.type === 'class' ? CLASSES[item.id].name :
+                 item.type === 'weapon' ? WEAPONS[item.id].name :
+                 PETS[item.id].name;
+    return `${rarityEmoji[item.rarity]} ${idx + 1}. ${item.id} ${name} - ${item.price}💎`;
+  }).join('\\n');
+
+  const nextRotation = hero.shop ? new Date(hero.shop.lastRotation + 8 * 60 * 60 * 1000) : new Date();
+  const hoursLeft = Math.ceil((nextRotation - Date.now()) / (1000 * 60 * 60));
+
+  const message = `
+${getBotTitle()}
+
+🛒 **Item Shop**
+
+💎 **Your Currency:** ${hero.currency} S
+
+**Available items:**
+${shopList}
+
+⏰ **Shop rotates in:** ${hoursLeft}h
+
+**Prices:**
+⚪ Class/Weapon: 250 | Pet: 500
+🔵 Class/Weapon: 2500 | Pet: 5000
+🟠 Class/Weapon: 25000 | Pet: 50000
+  `;
+
+  const buttons = [];
+  shop.forEach((_, idx) => {
+    buttons.push([Markup.button.callback(`Buy ${idx + 1}`, `shop_buy_${idx}`)]);
+  });
+  
+  buttons.push([Markup.button.callback('🔙 Back', 'hero_inventory')]);
 
   await ctx.editMessageText(message, {
     parse_mode: 'Markdown',
@@ -224,5 +453,10 @@ module.exports = {
   handleHeroMenu,
   handleProfile,
   handleBattleMenu,
-  handleInventory
+  handleInventory,
+  handleInventoryEquip,
+  handleEquipType,
+  handleInventoryFuse,
+  handleInventorySell,
+  handleInventoryShop
 };

@@ -88,6 +88,7 @@ class HeroService {
   }
 
   createHero(userId) {
+    userId = String(userId);
     const hero = {
       level: 1,
       xp: 0,
@@ -127,10 +128,12 @@ class HeroService {
   }
 
   getHero(userId) {
+    userId = String(userId);
     return this.heroes.get(userId) || null;
   }
 
   getOrCreateHero(userId) {
+    userId = String(userId);
     let hero = this.getHero(userId);
     if (!hero) {
       hero = this.createHero(userId);
@@ -139,6 +142,7 @@ class HeroService {
   }
 
   addXP(userId, amount) {
+    userId = String(userId);
     const hero = this.getOrCreateHero(userId);
     hero.xp += amount;
     
@@ -155,6 +159,7 @@ class HeroService {
   }
 
   addCurrency(userId, amount) {
+    userId = String(userId);
     const hero = this.getOrCreateHero(userId);
     const luckBonus = 1 + (hero.luck * 0.005);
     const finalAmount = Math.floor(amount * luckBonus);
@@ -164,6 +169,7 @@ class HeroService {
   }
 
   spendStat(userId, stat) {
+    userId = String(userId);
     const hero = this.getHero(userId);
     if (!hero || hero.unspentPoints <= 0) return false;
     
@@ -177,6 +183,7 @@ class HeroService {
   }
 
   rechargeEnergy(userId) {
+    userId = String(userId);
     const hero = this.getHero(userId);
     if (!hero) return;
     
@@ -192,6 +199,7 @@ class HeroService {
   }
 
   consumeEnergy(userId) {
+    userId = String(userId);
     const hero = this.getHero(userId);
     if (!hero || hero.energy <= 0) return false;
     
@@ -201,6 +209,7 @@ class HeroService {
   }
 
   addItem(userId, itemType, itemId, rarity) {
+    userId = String(userId);
     const hero = this.getOrCreateHero(userId);
     
     if (hero.inventory.length >= hero.maxInventory) {
@@ -219,6 +228,7 @@ class HeroService {
   }
 
   equipItem(userId, inventoryIndex) {
+    userId = String(userId);
     const hero = this.getHero(userId);
     if (!hero || inventoryIndex >= hero.inventory.length) return false;
     
@@ -229,13 +239,34 @@ class HeroService {
     return true;
   }
 
+  // Unequip item
+  unequipItem(userId, itemType) {
+    userId = String(userId);
+    const hero = this.getHero(userId);
+    if (!hero || !hero.equipped[itemType]) return false;
+    
+    // Return item to inventory
+    const itemId = hero.equipped[itemType];
+    this.addItem(userId, itemType, itemId, 'common'); // Default rarity
+    hero.equipped[itemType] = null;
+    this.saveHeroesToFile();
+    return true;
+  }
+
+  // New sell system with proper pricing
   sellItem(userId, inventoryIndex) {
+    userId = String(userId);
     const hero = this.getHero(userId);
     if (!hero || inventoryIndex >= hero.inventory.length) return 0;
     
     const item = hero.inventory[inventoryIndex];
-    const prices = { common: 15, rare: 30, legendary: 60 };
-    const price = prices[item.rarity] || 15;
+    const isPet = item.type === 'pet';
+    const prices = {
+      common: isPet ? 50 : 25,
+      rare: isPet ? 500 : 250,
+      legendary: isPet ? 5000 : 2500
+    };
+    const price = prices[item.rarity] || 25;
     
     hero.currency += price;
     hero.inventory.splice(inventoryIndex, 1);
@@ -243,7 +274,114 @@ class HeroService {
     return price;
   }
 
+  // Auto-fuse all eligible items
+  autoFuseItems(userId) {
+    userId = String(userId);
+    const hero = this.getHero(userId);
+    if (!hero) return { fused: 0, items: [] };
+    
+    const fused = [];
+    
+    // Group items by type, id, and rarity
+    const grouped = {};
+    hero.inventory.forEach((item, index) => {
+      if (item.rarity === 'legendary') return; // Can't fuse legendary
+      const key = `${item.type}_${item.id}_${item.rarity}`;
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(index);
+    });
+    
+    // Fuse groups of 5+
+    Object.entries(grouped).forEach(([key, indices]) => {
+      while (indices.length >= 5) {
+        const targetRarity = key.endsWith('_common') ? 'rare' : 'legendary';
+        const [type, id] = key.split('_');
+        
+        // Remove 5 items (from end to preserve indices)
+        for (let i = 0; i < 5; i++) {
+          hero.inventory.splice(indices.pop(), 1);
+        }
+        
+        // Add fused item
+        this.addItem(userId, type, id, targetRarity);
+        fused.push({ type, id, rarity: targetRarity });
+      }
+    });
+    
+    return { fused: fused.length, items: fused };
+  }
+
+  // Shop system
+  getShopItems(userId) {
+    userId = String(userId);
+    const hero = this.getOrCreateHero(userId);
+    if (!hero.shop || !hero.shop.lastRotation || 
+        Date.now() - hero.shop.lastRotation > 8 * 60 * 60 * 1000) {
+      hero.shop = this.generateShopItems();
+      this.saveHeroesToFile();
+    }
+    return hero.shop.items;
+  }
+
+  generateShopItems() {
+    const items = [];
+    const rarities = ['common', 'rare', 'legendary'];
+    const types = ['class', 'weapon', 'pet'];
+    
+    for (let i = 0; i < 2; i++) {
+      const rarity = rarities[Math.floor(Math.random() * rarities.length)];
+      const type = types[Math.floor(Math.random() * types.length)];
+      const itemList = type === 'class' ? Object.keys(CLASSES) :
+                       type === 'weapon' ? Object.keys(WEAPONS) : 
+                       Object.keys(PETS);
+      const id = itemList[Math.floor(Math.random() * itemList.length)];
+      
+      const isPet = type === 'pet';
+      const prices = {
+        common: isPet ? 500 : 250,
+        rare: isPet ? 5000 : 2500,
+        legendary: isPet ? 50000 : 25000
+      };
+      
+      items.push({
+        type,
+        id,
+        rarity,
+        price: prices[rarity]
+      });
+    }
+    
+    return { items, lastRotation: Date.now() };
+  }
+
+  buyShopItem(userId, shopIndex) {
+    userId = String(userId);
+    const hero = this.getHero(userId);
+    if (!hero) return { success: false, error: 'Hero not found' };
+    
+    const shop = this.getShopItems(userId);
+    if (shopIndex >= shop.length) return { success: false, error: 'Invalid item' };
+    
+    const item = shop[shopIndex];
+    if (hero.currency < item.price) {
+      return { success: false, error: 'Not enough currency' };
+    }
+    
+    hero.currency -= item.price;
+    const result = this.addItem(userId, item.type, item.id, item.rarity);
+    
+    if (result.success) {
+      // Remove from shop
+      hero.shop.items.splice(shopIndex, 1);
+      this.saveHeroesToFile();
+      return { success: true, item };
+    }
+    
+    return result;
+  }
+
   fuseItems(userId, rarityToFuse) {
+    userId = String(userId);
     const hero = this.getHero(userId);
     if (!hero) return false;
     
@@ -272,6 +410,7 @@ class HeroService {
   }
 
   updateBattleStats(userId, won, damageDealt, damageTaken) {
+    userId = String(userId);
     const hero = this.getOrCreateHero(userId);
     hero.stats.totalBattles++;
     if (won) hero.stats.won++;
@@ -282,6 +421,7 @@ class HeroService {
   }
 
   awardStrategyXP(userId, type) {
+    userId = String(userId);
     if (type === 'open') {
       this.getOrCreateHero(userId).stats.strategiesOpened++;
       return this.addXP(userId, 500);

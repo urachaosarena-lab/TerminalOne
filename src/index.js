@@ -205,6 +205,8 @@ class TerminalOneBot {
     this.bot.action('hero_profile', heroHandlers.handleProfile);
     this.bot.action('hero_battle_menu', heroHandlers.handleBattleMenu);
     this.bot.action('hero_inventory', heroHandlers.handleInventory);
+    
+    // Stat allocation callbacks
     this.bot.action('stat_strength', async (ctx) => {
       ctx.services.hero.spendStat(ctx.from.id, 'strength');
       await heroHandlers.handleProfile(ctx);
@@ -217,15 +219,85 @@ class TerminalOneBot {
       ctx.services.hero.spendStat(ctx.from.id, 'luck');
       await heroHandlers.handleProfile(ctx);
     });
-    this.bot.action('fuse_common', async (ctx) => {
-      const success = ctx.services.hero.fuseItems(ctx.from.id, 'common');
-      await ctx.answerCbQuery(success ? '🔀 Fused 5 commons into 1 rare!' : '❌ Need 5 common items');
-      await heroHandlers.handleInventory(ctx);
+    
+    // Inventory menu callbacks
+    this.bot.action('inventory_equip', heroHandlers.handleInventoryEquip);
+    this.bot.action('inventory_fuse', heroHandlers.handleInventoryFuse);
+    this.bot.action('inventory_sell', heroHandlers.handleInventorySell);
+    this.bot.action('inventory_shop', heroHandlers.handleInventoryShop);
+    
+    // Equip type selection callbacks
+    this.bot.action('equip_class', (ctx) => heroHandlers.handleEquipType(ctx, 'class'));
+    this.bot.action('equip_weapon', (ctx) => heroHandlers.handleEquipType(ctx, 'weapon'));
+    this.bot.action('equip_pet', (ctx) => heroHandlers.handleEquipType(ctx, 'pet'));
+    
+    // Equip item callbacks (dynamic)
+    this.bot.action(/equip_do_(class|weapon|pet)_(\d+)/, async (ctx) => {
+      const match = ctx.match;
+      const type = match[1];
+      const index = parseInt(match[2]);
+      const userId = ctx.from.id;
+      const hero = ctx.services.hero.getHero(userId);
+      const items = hero.inventory.filter(i => i.type === type)
+        .sort((a, b) => {
+          const rarityOrder = { legendary: 0, rare: 1, common: 2 };
+          return rarityOrder[a.rarity] - rarityOrder[b.rarity];
+        });
+      const inventoryIndex = hero.inventory.indexOf(items[index]);
+      const result = ctx.services.hero.equipItem(userId, inventoryIndex);
+      if (result.success) {
+        await ctx.answerCbQuery(`✅ Equipped ${result.item.id}!`);
+      } else {
+        await ctx.answerCbQuery(`❌ ${result.error}`);
+      }
+      await heroHandlers.handleEquipType(ctx, type);
     });
-    this.bot.action('fuse_rare', async (ctx) => {
-      const success = ctx.services.hero.fuseItems(ctx.from.id, 'rare');
-      await ctx.answerCbQuery(success ? '🔀 Fused 5 rares into 1 legendary!' : '❌ Need 5 rare items');
-      await heroHandlers.handleInventory(ctx);
+    
+    // Unequip callbacks
+    this.bot.action(/unequip_(class|weapon|pet)/, async (ctx) => {
+      const type = ctx.match[1];
+      const userId = ctx.from.id;
+      const result = ctx.services.hero.unequipItem(userId, type);
+      if (result.success) {
+        await ctx.answerCbQuery('✅ Unequipped!');
+      } else {
+        await ctx.answerCbQuery(`❌ ${result.error}`);
+      }
+      await heroHandlers.handleEquipType(ctx, type);
+    });
+    
+    // Fuse callbacks
+    this.bot.action('fuse_auto', async (ctx) => {
+      const userId = ctx.from.id;
+      const result = ctx.services.hero.autoFuseItems(userId);
+      if (result.fused > 0) {
+        await ctx.answerCbQuery(`✨ Fused ${result.fused} items!`);
+      } else {
+        await ctx.answerCbQuery('❌ Nothing to fuse');
+      }
+      await heroHandlers.handleInventoryFuse(ctx);
+    });
+    
+    // Sell callbacks
+    this.bot.action(/sell_do_(\d+)/, async (ctx) => {
+      const index = parseInt(ctx.match[1]);
+      const userId = ctx.from.id;
+      const price = ctx.services.hero.sellItem(userId, index);
+      await ctx.answerCbQuery(`💰 Sold for ${price}💎!`);
+      await heroHandlers.handleInventorySell(ctx);
+    });
+    
+    // Shop buy callbacks
+    this.bot.action(/shop_buy_(\d+)/, async (ctx) => {
+      const index = parseInt(ctx.match[1]);
+      const userId = ctx.from.id;
+      const result = ctx.services.hero.buyShopItem(userId, index);
+      if (result.success) {
+        await ctx.answerCbQuery(`✅ Bought ${result.item.id}!`);
+      } else {
+        await ctx.answerCbQuery(`❌ ${result.error}`);
+      }
+      await heroHandlers.handleInventoryShop(ctx);
     });
     
     // Battle callbacks
