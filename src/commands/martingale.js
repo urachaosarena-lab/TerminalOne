@@ -9,7 +9,8 @@ const CONFIG_LIMITS = {
   multiplier: { min: 1.0, max: 5.0 },
   maxLevels: { min: 1, max: 20 },
   profitTarget: { min: 1, max: 1000 },
-  slippage: { min: 0.1, max: 10.0 }
+  slippage: { min: 0.1, max: 10.0 },
+  stopLoss: { min: 0, max: 90 }
 };
 
 const STRATEGY_PRESETS = {
@@ -19,7 +20,8 @@ const STRATEGY_PRESETS = {
     multiplier: 2.0,
     maxLevels: 5,
     profitTarget: 15,
-    slippage: 2.0
+    slippage: 3.0,
+    stopLoss: 0
   },
   Regular: {
     initialBuyAmount: 0.01,
@@ -27,7 +29,8 @@ const STRATEGY_PRESETS = {
     multiplier: 1.2,
     maxLevels: 6,
     profitTarget: 5,
-    slippage: 1.0
+    slippage: 3.0,
+    stopLoss: 0
   },
   Stable: {
     initialBuyAmount: 0.01,
@@ -35,7 +38,8 @@ const STRATEGY_PRESETS = {
     multiplier: 1.1,
     maxLevels: 8,
     profitTarget: 3,
-    slippage: 0.5
+    slippage: 3.0,
+    stopLoss: 0
   }
 };
 
@@ -82,6 +86,7 @@ ${balanceText}
 ⚡ Multiplier: **${userConfig.multiplier}x**
 🔢 Max Levels: **${userConfig.maxLevels}**
 🎯 Profit Target: **${userConfig.profitTarget}%**
+🛑 Stop Loss: **${userConfig.stopLoss === 0 ? 'OFF' : userConfig.stopLoss + '%'}**
 
 📎 Max Investment: **${calculateMaxInvestment(userConfig).toFixed(4)} SOL**
 📈 **Active Strategies:** ${activeCount}
@@ -131,6 +136,7 @@ ${getBotTitle()}
 🔢 **Max Levels:** ${userConfig.maxLevels}
 🎯 **Profit Target:** ${userConfig.profitTarget}%
 🌊 **Slippage:** ${userConfig.slippage}%
+🛑 **Stop Loss:** ${userConfig.stopLoss === 0 ? 'OFF' : userConfig.stopLoss + '%'}
 📉 **Max Drop:** ${maxDrop}%
 
 📊 **Investment Breakdown:**
@@ -146,6 +152,7 @@ ${generateInvestmentBreakdown(userConfig)}
     [Markup.button.callback('💰 Initial Amount', 'config_initial'), Markup.button.callback('📉 Drop %', 'config_drop')],
     [Markup.button.callback('⚡ Multiplier', 'config_multiplier'), Markup.button.callback('🔢 Max Levels', 'config_levels')],
     [Markup.button.callback('🎯 Profit Target', 'config_profit'), Markup.button.callback('🌊 Slippage', 'config_slippage')],
+    [Markup.button.callback('🛑 Stop Loss', 'config_stoploss')],
     [Markup.button.callback('🔄 Reset to Defaults', 'config_reset')],
     [Markup.button.callback('🔙 Back', 'martingale_menu')]
   ]);
@@ -359,9 +366,10 @@ const handleConfirmLaunch = async (ctx) => {
       multiplier: userConfig.multiplier,
       maxLevels: userConfig.maxLevels,
       profitTarget: userConfig.profitTarget,
+      slippage: userConfig.slippage,
       maxTotalInvestment: calculateMaxInvestment(userConfig),
-      stopLossEnabled: true,
-      maxLossPercentage: 80
+      stopLossEnabled: userConfig.stopLoss > 0,
+      maxLossPercentage: userConfig.stopLoss || 0
     };
 
     // Show launch confirmation
@@ -377,7 +385,7 @@ ${getBotTitle()}
 ⚠️ **Risk Summary:**
 • Max Investment: **${strategyConfig.maxTotalInvestment.toFixed(4)} SOL**
 • Risk Level: **${analysis.riskLevel}**
-• Stop Loss: **80%**
+• Stop Loss: **${strategyConfig.stopLossEnabled ? strategyConfig.maxLossPercentage + '%' : 'OFF'}**
 
 🔥 **This will execute the first buy immediately!**
 
@@ -418,9 +426,10 @@ const handleExecuteLaunch = async (ctx) => {
       multiplier: userConfig.multiplier,
       maxLevels: userConfig.maxLevels,
       profitTarget: userConfig.profitTarget,
+      slippage: userConfig.slippage,
       maxTotalInvestment: calculateMaxInvestment(userConfig),
-      stopLossEnabled: true,
-      maxLossPercentage: 80
+      stopLossEnabled: userConfig.stopLoss > 0,
+      maxLossPercentage: userConfig.stopLoss || 0
     };
 
     // Show launching message
@@ -535,30 +544,57 @@ ${getBotTitle()}
     alertsSection += `\n`;
   }
   
+  // Build strategy list with live prices
+  const strategyList = await Promise.all(active.map(async (strategy, index) => {
+    // Get current price for accurate ROI
+    let currentPrice = strategy.highestPrice || strategy.averageBuyPrice || 0;
+    try {
+      const priceData = await ctx.services.price.getTokenPrice(strategy.tokenAddress);
+      currentPrice = priceData.price || currentPrice;
+    } catch (err) {
+      // Use stored price if fetch fails
+    }
+    
+    // Get SOL price for accurate conversion
+    let solPrice = 200; // Fallback
+    try {
+      const solData = await ctx.services.price.getSolanaPrice();
+      solPrice = solData.price;
+    } catch (err) {
+      // Use fallback
+    }
+    
+    // Calculate current value: tokens * token price USD / SOL price USD = value in SOL
+    const currentValueUSD = strategy.totalTokens * currentPrice;
+    const currentValueSOL = currentValueUSD / solPrice;
+    const profitLoss = currentValueSOL - strategy.totalInvested;
+    const roi = strategy.totalInvested > 0 ? (profitLoss / strategy.totalInvested * 100) : 0;
+    
+    // Add warning indicator for strategies at risk
+    let warningIndicator = '';
+    if (strategy.currentLevel >= strategy.maxLevels * 0.8) {
+      warningIndicator = '⚠️ '; // High level warning
+    } else if (strategy.currentLevel >= strategy.maxLevels * 0.6) {
+      warningIndicator = '🟡 '; // Medium level warning
+    }
+    
+    const roiEmoji = roi >= 0 ? '🟢' : '🔴';
+    const roiSign = roi >= 0 ? '+' : '';
+    
+    return `${warningIndicator}**${index + 1}. ${strategy.symbol || 'TOKEN'}**
+🆔 \`${strategy.id.slice(-8)}\`
+💰 Invested: ${strategy.totalInvested.toFixed(4)} SOL
+📈 Level: ${strategy.currentLevel}/${strategy.maxLevels}
+${roiEmoji} P&L: ${roiSign}${profitLoss.toFixed(4)} SOL (${roiSign}${roi.toFixed(2)}%)
+⏰ ${getTimeAgo(strategy.createdAt)}`;
+  }));
+  
   const message = `
 ${getBotTitle()}
 
 📈 **Active Strategies** (${active.length})
 
-${alertsSection}${active.map((strategy, index) => {
-  const roi = strategy.totalInvested > 0 ? 
-    (((strategy.totalTokens * strategy.highestPrice || 0) - strategy.totalInvested) / strategy.totalInvested * 100) : 0;
-  
-  // Add warning indicator for strategies at risk
-  let warningIndicator = '';
-  if (strategy.currentLevel >= strategy.maxLevels * 0.8) {
-    warningIndicator = '⚠️ '; // High level warning
-  } else if (strategy.currentLevel >= strategy.maxLevels * 0.6) {
-    warningIndicator = '🟡 '; // Medium level warning
-  }
-  
-  return `${warningIndicator}**${index + 1}. ${strategy.symbol}**
-🆔 \`${strategy.id.slice(-8)}\`
-💰 Invested: ${strategy.totalInvested.toFixed(4)} SOL
-📈 Level: ${strategy.currentLevel}/${strategy.maxLevels}
-📈 ROI: ${roi.toFixed(2)}%
-⏰ ${getTimeAgo(strategy.createdAt)}`;
-}).join('\n\n')}
+${alertsSection}${strategyList.join('\n\n')}
 
 💡 **Tap a strategy to view details**
   `;
@@ -862,6 +898,7 @@ ${getBotTitle()}
         [Markup.button.callback('❌ Cancel', `view_strategy_${strategyId}`)]
       ])
     });
+    await ctx.answerCbQuery();
   } catch (error) {
     if (error.description?.includes('message is not modified')) {
       // Message content is the same, just answer the callback
@@ -1093,7 +1130,8 @@ const handleConfigChange = async (ctx, configType) => {
     'multiplier': '⚡ Multiplier (x)',
     'levels': '🔢 Max Levels',
     'profit': '🎯 Profit Target (%)',
-    'slippage': '🌊 Slippage (%)'
+    'slippage': '🌊 Slippage (%)',
+    'stoploss': '🛑 Stop Loss (%)'
   };
   
   const configLimits = {
@@ -1102,20 +1140,34 @@ const handleConfigChange = async (ctx, configType) => {
     'multiplier': { min: 1.0, max: 5.0, step: 0.1 },
     'levels': { min: 1, max: 20, step: 1 },
     'profit': { min: 0.2, max: 1000, step: 0.1 },
-    'slippage': { min: 0.1, max: 10.0, step: 0.1 }
+    'slippage': { min: 0.1, max: 10.0, step: 0.1 },
+    'stoploss': { min: 0, max: 90, step: 1 }
   };
   
   const limit = configLimits[configType];
   const label = configLabels[configType];
   
+  const configKeyMap = {
+    'initial': 'initialBuyAmount',
+    'drop': 'dropPercentage',
+    'multiplier': 'multiplier',
+    'levels': 'maxLevels',
+    'profit': 'profitTarget',
+    'slippage': 'slippage',
+    'stoploss': 'stopLoss'
+  };
+  
+  const currentValue = getUserConfig(ctx, ctx.from.id)[configKeyMap[configType]];
+  const displayValue = configType === 'stoploss' && currentValue === 0 ? 'OFF' : currentValue;
+  
   const message = `
 ${getBotTitle()}
 
-⚙️ **Configure ${label}**
+⚩️ **Configure ${label}**
 
-📝 **Current Value:** ${getUserConfig(ctx, ctx.from.id)[configType === 'initial' ? 'initialBuyAmount' : configType === 'drop' ? 'dropPercentage' : configType === 'multiplier' ? 'multiplier' : configType === 'levels' ? 'maxLevels' : configType === 'profit' ? 'profitTarget' : 'slippage']}
+📝 **Current Value:** ${displayValue}
 
-📊 **Valid Range:** ${limit.min} - ${limit.max}
+📊 **Valid Range:** ${limit.min} - ${limit.max}${configType === 'stoploss' ? ' (0 = OFF)' : ''}
 
 💡 **Send the new value:**
   `;
@@ -1180,7 +1232,8 @@ const handleConfigValueInput = async (ctx) => {
     'multiplier': { min: 1.0, max: 5.0 },
     'levels': { min: 1, max: 20 },
     'profit': { min: 0.2, max: 1000 },
-    'slippage': { min: 0.1, max: 10.0 }
+    'slippage': { min: 0.1, max: 10.0 },
+    'stoploss': { min: 0, max: 90 }
   };
   
   try {
@@ -1229,11 +1282,16 @@ const handleConfigValueInput = async (ctx) => {
     
     // Update configuration
     const userConfig = getUserConfig(ctx, userId);
-    const configKey = configType === 'initial' ? 'initialBuyAmount' : 
-                     configType === 'drop' ? 'dropPercentage' :
-                     configType === 'multiplier' ? 'multiplier' :
-                     configType === 'levels' ? 'maxLevels' :
-                     configType === 'profit' ? 'profitTarget' : 'slippage';
+    const configKeyMap = {
+      'initial': 'initialBuyAmount',
+      'drop': 'dropPercentage',
+      'multiplier': 'multiplier',
+      'levels': 'maxLevels',
+      'profit': 'profitTarget',
+      'slippage': 'slippage',
+      'stoploss': 'stopLoss'
+    };
+    const configKey = configKeyMap[configType];
     
     const oldValue = userConfig[configKey];
     userConfig[configKey] = inputValue;
@@ -1249,7 +1307,8 @@ const handleConfigValueInput = async (ctx) => {
       'multiplier': '⚡ Multiplier',
       'levels': '🔢 Max Levels',
       'profit': '🎯 Profit Target',
-      'slippage': '🌊 Slippage'
+      'slippage': '🌊 Slippage',
+      'stoploss': '🛑 Stop Loss'
     };
     
     await ctx.telegram.editMessageText(

@@ -194,6 +194,7 @@ class TerminalOneBot {
     this.bot.action('config_levels', (ctx) => martingaleHandlers.handleConfigChange(ctx, 'levels'));
     this.bot.action('config_profit', (ctx) => martingaleHandlers.handleConfigChange(ctx, 'profit'));
     this.bot.action('config_slippage', (ctx) => martingaleHandlers.handleConfigChange(ctx, 'slippage'));
+    this.bot.action('config_stoploss', (ctx) => martingaleHandlers.handleConfigChange(ctx, 'stoploss'));
     
     // History callbacks
     this.bot.action('martingale_history', martingaleHandlers.handleTradingHistory);
