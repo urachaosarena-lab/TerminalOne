@@ -69,13 +69,14 @@ ${balanceInfo.hasWallet ? `\n📍 \`${balanceInfo.publicKey.slice(0,5)}...${bala
       Markup.inlineKeyboard([
         [Markup.button.callback('💰 Wallet', 'wallet'), Markup.button.callback('📊 Active Strategies', 'martingale_active')],
         [Markup.button.callback('🤖 Strategies', 'strategies_menu'), Markup.button.callback('⚔️ Hero', 'hero_menu')],
-        [Markup.button.callback('🔄 Trade', 'trade')],
+        [Markup.button.callback('📊 Dashboard', 'dashboard'), Markup.button.callback('🔄 Trade', 'trade')],
         [Markup.button.callback('⚙️ Settings', 'settings'), Markup.button.callback('❓ Help', 'help')]
       ]) :
       // User has no wallet - show wallet setup
       Markup.inlineKeyboard([
         [Markup.button.callback('🆕 Create Wallet', 'create_wallet')],
         [Markup.button.callback('📥 Import Wallet', 'import_wallet')],
+        [Markup.button.callback('📊 Dashboard', 'dashboard')],
         [Markup.button.callback('❓ Help', 'help')]
       ]);
 

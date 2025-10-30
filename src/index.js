@@ -15,6 +15,7 @@ const RateLimitService = require('./services/RateLimitService');
 const MonitoringService = require('./services/MonitoringService');
 const { HeroService } = require('./services/HeroService');
 const BattleService = require('./services/BattleService');
+const AnalyticsService = require('./services/AnalyticsService');
 const { createHealthCheckServer } = require('./utils/healthCheck');
 const { getBotTitle } = require('./utils/version');
 
@@ -25,6 +26,7 @@ const walletHandlers = require('./commands/wallet');
 const martingaleHandlers = require('./commands/martingale');
 const heroHandlers = require('./commands/hero');
 const battleHandlers = require('./commands/battle');
+const dashboardHandlers = require('./commands/dashboard');
 
 class TerminalOneBot {
   constructor() {
@@ -59,6 +61,14 @@ class TerminalOneBot {
     // RPG Game services
     this.heroService = new HeroService();
     this.battleService = new BattleService(this.heroService);
+    
+    // Analytics service
+    this.analyticsService = new AnalyticsService(
+      this.walletService,
+      this.martingaleService,
+      this.heroService,
+      this.revenueService
+    );
     
     // Make services available to bot context (deprecated - use middleware)
     this.bot.solanaService = this.solanaService;
@@ -110,8 +120,18 @@ class TerminalOneBot {
         rateLimit: this.rateLimitService,
         monitoring: this.monitoringService,
         hero: this.heroService,
-        battle: this.battleService
+        battle: this.battleService,
+        analytics: this.analyticsService
       };
+      return next();
+    });
+    
+    // Track user activity for analytics
+    this.bot.use((ctx, next) => {
+      if (ctx.from?.id) {
+        const actionType = ctx.message?.text || ctx.callbackQuery?.data || 'unknown';
+        this.analyticsService.trackUserActivity(ctx.from.id, actionType);
+      }
       return next();
     });
     
@@ -306,6 +326,9 @@ class TerminalOneBot {
     this.bot.action(/ability_(\d+)/, battleHandlers.handleSelectAbility);
     this.bot.action('battle_flee', battleHandlers.handleFleeBattle);
     this.bot.action('battle_collect', battleHandlers.handleCollectRewards);
+    
+    // Dashboard callback
+    this.bot.action('dashboard', dashboardHandlers.handleDashboard);
     
     // Placeholder callbacks for future features
     this.bot.action('portfolio', (ctx) => {

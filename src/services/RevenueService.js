@@ -174,6 +174,18 @@ class RevenueService {
   }
 
   /**
+   * Return all revenue records as an array with timestamps and fee amounts
+   */
+  getAllRevenue() {
+    const records = [];
+    for (const [date, revenue] of this.dailyRevenue) {
+      // Create a timestamp at 00:00:00 UTC for the given date stringn      const timestamp = new Date(`${date}T00:00:00.000Z`).toISOString();
+      records.push({ timestamp, feeAmount: revenue });
+    }
+    return records;
+  }
+
+  /**
    * Calculate fee preview for user
    */
   previewTransactionFee(transactionAmountSOL) {
