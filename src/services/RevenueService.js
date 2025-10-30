@@ -179,7 +179,8 @@ class RevenueService {
   getAllRevenue() {
     const records = [];
     for (const [date, revenue] of this.dailyRevenue) {
-      // Create a timestamp at 00:00:00 UTC for the given date stringn      const timestamp = new Date(`${date}T00:00:00.000Z`).toISOString();
+      // Create a timestamp at 00:00:00 UTC for the given date string
+      const timestamp = new Date(`${date}T00:00:00.000Z`).toISOString();
       records.push({ timestamp, feeAmount: revenue });
     }
     return records;
