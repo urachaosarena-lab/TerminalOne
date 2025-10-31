@@ -583,7 +583,7 @@ ${getBotTitle()}
     
     return `${warningIndicator}**${index + 1}. ${strategy.symbol || 'TOKEN'}**
 🆔 \`${strategy.id.slice(-8)}\`
-💰 Invested: ${strategy.totalInvested.toFixed(4)} SOL
+💰 Value: ${currentValueSOL.toFixed(4)} SOL
 📈 Level: ${strategy.currentLevel}/${strategy.maxLevels}
 ${roiEmoji} P&L: ${roiSign}${profitLoss.toFixed(4)} SOL (${roiSign}${roi.toFixed(2)}%)
 ⏰ ${getTimeAgo(strategy.createdAt)}`;
@@ -684,6 +684,7 @@ ${getBotTitle()}
 
 🤖 **Strategy Info:**
 • Level: **${strategy.currentLevel}/${strategy.maxLevels}**
+• Cycles: **${strategy.sellCycles || 0}**
 • Avg Buy Price: **$${avgBuyPrice.toFixed(8)}**
 • Total Tokens: **${strategy.totalTokens.toFixed(4)} ${strategy.symbol || 'UNKNOWN'}**
 • Next Buy Trigger: **$${nextBuyTrigger.toFixed(8)}**
@@ -909,46 +910,46 @@ ${getBotTitle()}
   }
 };
 
-/**
- * Handle confirmed stop strategy
- */
-const handleConfirmStopStrategy = async (ctx) => {
-  const strategyId = ctx.match[1];
-  const martingaleService = ctx.services?.martingale;
+  /**
+   * Handle confirmed stop strategy
+   */
+  const handleConfirmStopStrategy = async (ctx) => {
+    const strategyId = ctx.match[1];
+    const martingaleService = ctx.services?.martingale;
+    
+    const strategy = martingaleService.getStrategy(strategyId);
+    if (!strategy) {
+      await ctx.answerCbQuery('❌ Strategy not found');
+      return;
+    }
   
-  const strategy = martingaleService.getStrategy(strategyId);
-  if (!strategy) {
-    await ctx.answerCbQuery('❌ Strategy not found');
-    return;
-  }
-
-  try {
-    // Show stopping message
-    await ctx.editMessageText(
-      '${getBotTitle()}\n\n🛑 **Stopping Strategy...**\n\n⏳ Ending monitoring and updating status...',
-      { parse_mode: 'Markdown' }
-    );
-
-    // Get current price for final value calculation (without selling)
-    const currentPrice = await ctx.services.price.getTokenPrice(strategy.tokenAddress);
-    const solPrice = await ctx.services.price.getSolanaPrice();
-    
-    // Calculate current value in SOL: total tokens * current price
-    const currentValueUSD = strategy.totalTokens * currentPrice.price;
-    const currentValueSOL = currentValueUSD / solPrice.price;
-    const netInvested = strategy.netInvested || (strategy.totalInvested * 0.99);
-    
-    // Update strategy status (without selling tokens)
-    strategy.status = 'stopped';
-    strategy.finalValue = currentValueSOL;
-    strategy.finalProfit = currentValueSOL - netInvested;
-    strategy.finalProfitPercentage = (strategy.finalProfit / netInvested) * 100;
-    strategy.stoppedAt = new Date();
-    strategy.stopReason = 'manual_stop';
-    
-    // Stop monitoring and save
-    await martingaleService.stopStrategyMonitoring(strategyId);
-    martingaleService.saveStrategiesToFile();
+    try {
+      // Show stopping message
+      await ctx.editMessageText(
+        `${getBotTitle()}\n\n🛑 **Stopping Strategy...**\n\n⏳ Ending monitoring and updating status...`,
+        { parse_mode: 'Markdown' }
+      );
+  
+      // Get current price for final value calculation (without selling)
+      const currentPrice = await ctx.services.price.getTokenPrice(strategy.tokenAddress);
+      const solPrice = await ctx.services.price.getSolanaPrice();
+      
+      // Calculate current value in SOL: total tokens * current price
+      const currentValueUSD = strategy.totalTokens * currentPrice.price;
+      const currentValueSOL = currentValueUSD / solPrice.price;
+      const netInvested = strategy.netInvested || (strategy.totalInvested * 0.99);
+      
+      // Update strategy status (without selling tokens)
+      strategy.status = 'stopped';
+      strategy.finalValue = currentValueSOL;
+      strategy.finalProfit = currentValueSOL - netInvested;
+      strategy.finalProfitPercentage = (strategy.finalProfit / netInvested) * 100;
+      strategy.stoppedAt = new Date();
+      strategy.stopReason = 'manual_stop';
+      
+      // Stop monitoring and save
+      await martingaleService.stopStrategyMonitoring(strategyId);
+      martingaleService.saveStrategiesToFile();
     
     // Calculate XP and rewards based on strategy performance
     const baseXP = 150; // Base XP for completing a strategy

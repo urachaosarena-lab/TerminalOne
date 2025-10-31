@@ -127,6 +127,7 @@ class MartingaleStrategy {
       totalInvested: 0, // Total SOL invested
       totalTokens: 0, // Total tokens accumulated
       averageBuyPrice: 0, // Volume-weighted average buy price
+      sellCycles: 0, // Number of times profit target was hit
       
       // Buy history
       buyOrders: [],
@@ -539,6 +540,7 @@ class MartingaleStrategy {
         strategy.finalProfit = totalProfit;
         strategy.finalProfitPercentage = finalProfitPercentage;
         strategy.completedAt = new Date();
+        strategy.sellCycles = (strategy.sellCycles || 0) + 1; // Increment cycle counter
 
         // Log strategy completion
         if (this.tradingHistoryService) {
