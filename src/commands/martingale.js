@@ -570,6 +570,18 @@ ${getBotTitle()}
     const profitLoss = currentValueSOL - strategy.totalInvested;
     const roi = strategy.totalInvested > 0 ? (profitLoss / strategy.totalInvested * 100) : 0;
     
+    // Debug logging
+    logger.info(`Active strategy ${strategy.symbol}:`, {
+      totalTokens: strategy.totalTokens,
+      tokenPriceUSD: currentPrice,
+      currentValueUSD,
+      solPriceUSD: solPrice,
+      currentValueSOL,
+      totalInvested: strategy.totalInvested,
+      profitLoss,
+      roi
+    });
+    
     // Add warning indicator for strategies at risk
     let warningIndicator = '';
     if (strategy.currentLevel >= strategy.maxLevels * 0.8) {
@@ -931,116 +943,24 @@ ${getBotTitle()}
     }
   
     try {
-      // Show stopping message
-      await ctx.editMessageText(
-        `${getBotTitle()}\n\n🛑 **Stopping Strategy...**\n\n⏳ Ending monitoring and updating status...`,
-        { parse_mode: 'Markdown' }
-      );
-  
-      // Get current price for final value calculation (without selling)
-      const currentPrice = await ctx.services.price.getTokenPrice(strategy.tokenAddress);
-      const solPrice = await ctx.services.price.getSolanaPrice();
-      
-      // Calculate current value in SOL: total tokens * current price
-      const currentValueUSD = strategy.totalTokens * currentPrice.price;
-      const currentValueSOL = currentValueUSD / solPrice.price;
-      const netInvested = strategy.netInvested || (strategy.totalInvested * 0.99);
-      
-      // Update strategy status (without selling tokens)
+      // Update strategy status to stopped
       strategy.status = 'stopped';
-      strategy.finalValue = currentValueSOL;
-      strategy.finalProfit = currentValueSOL - netInvested;
-      strategy.finalProfitPercentage = (strategy.finalProfit / netInvested) * 100;
       strategy.stoppedAt = new Date();
       strategy.stopReason = 'manual_stop';
       
       // Stop monitoring and save
       await martingaleService.stopStrategyMonitoring(strategyId);
       martingaleService.saveStrategiesToFile();
-    
-    // Calculate XP and rewards based on strategy performance
-    const baseXP = 150; // Base XP for completing a strategy
-    const bonusXP = strategy.finalProfit > 0 ? Math.floor(strategy.finalProfitPercentage * 2) : 0; // 2 XP per 1% profit
-    const totalXP = baseXP + bonusXP;
-    
-    // Award currency based on invested amount
-    const currencyReward = Math.floor(strategy.totalInvested * 10); // 10 💎S per SOL invested
-    
-    // Generate loot chance (20% for strategy completion)
-    let lootItem = null;
-    if (Math.random() < 0.2) {
-      const lootTypes = ['class', 'weapon', 'pet'];
-      const lootType = lootTypes[Math.floor(Math.random() * lootTypes.length)];
-      const rarities = ['common', 'rare', 'legendary'];
-      const rarityRoll = Math.random();
-      const rarity = rarityRoll < 0.7 ? 'common' : rarityRoll < 0.95 ? 'rare' : 'legendary';
-      lootItem = { type: lootType, rarity };
+      
+      // Answer callback and redirect to active strategies
+      await ctx.answerCbQuery('✅ Strategy stopped successfully');
+      await handleActiveStrategies(ctx);
+      
+    } catch (error) {
+      logger.error(`Error stopping strategy ${strategyId}:`, error);
+      await ctx.answerCbQuery('❌ Error stopping strategy');
     }
-    
-    // Store rewards in session for collection
-    ctx.session = ctx.session || {};
-    ctx.session.pendingRewards = {
-      strategyId,
-      xp: totalXP,
-      currency: currencyReward,
-      loot: lootItem,
-      baseXP,
-      bonusXP
-    };
-    
-    // Show rewards collection panel
-    const rarityEmoji = {
-      'common': '⚪',
-      'rare': '🔵',
-      'legendary': '🟠'
-    };
-    
-    const lootText = lootItem ? 
-      `\n🎁 **Loot:** ${rarityEmoji[lootItem.rarity]} ${lootItem.type.toUpperCase()}` : '';
-    
-    const rewardsMessage = `
-${getBotTitle()}
-
-✅ **Strategy Stopped Successfully**
-
-🎯 **${strategy.symbol}** Strategy
-🆔 **ID:** \`${strategy.id.slice(-8)}\`
-
-📊 **Final Status:**
-• Total Invested: **${strategy.totalInvested.toFixed(4)} SOL**
-• Current Value: **${currentValueSOL.toFixed(4)} SOL**
-• P&L: ${strategy.finalProfit >= 0 ? '🟢' : '🔴'} **${strategy.finalProfit >= 0 ? '+' : ''}${strategy.finalProfit.toFixed(4)} SOL**
-• ROI: ${strategy.finalProfitPercentage >= 0 ? '🟢' : '🔴'} **${strategy.finalProfitPercentage >= 0 ? '+' : ''}${strategy.finalProfitPercentage.toFixed(2)}%**
-
-🎉 **Rewards Earned:**
-⭐ **XP:** +${totalXP} ${bonusXP > 0 ? `(${baseXP} base + ${bonusXP} bonus)` : ''}
-💎 **Currency:** +${currencyReward} 💎S${lootText}
-
-👇 **Click below to collect your rewards!**
-    `;
-    
-    await ctx.editMessageText(rewardsMessage, {
-      parse_mode: 'Markdown',
-      ...Markup.inlineKeyboard([
-        [Markup.button.callback('🎁 Collect Rewards', `collect_strategy_rewards_${strategyId}`)],
-      ])
-    });
-
-  } catch (error) {
-    logger.error(`Error stopping strategy ${strategyId}:`, error);
-    
-    await ctx.editMessageText(
-      `${getBotTitle()}\n\n❌ **Error Stopping Strategy**\n\n${error.message}\n\n🔄 **You can try again or contact support.**`,
-      {
-        parse_mode: 'Markdown',
-        ...Markup.inlineKeyboard([
-          [Markup.button.callback('🔄 Try Again', `stop_strategy_${strategyId}`)],
-          [Markup.button.callback('🔙 View Strategy', `view_strategy_${strategyId}`)]
-        ])
-      }
-    );
-  }
-};
+  };
 
 /**
  * Handle collect strategy rewards
