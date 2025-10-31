@@ -660,14 +660,28 @@ const handleViewStrategy = async (ctx) => {
     // The averageBuyPrice is already in USD per token from the strategy
     const avgBuyPrice = strategy.averageBuyPrice || currentTokenPrice;
     
-    // Calculate current value in SOL: total tokens bought * current price of the token
+    // REVAMPED CALCULATION: Simple and clear
+    // Step 1: Calculate current USD value of all tokens
     const currentValueUSD = strategy.totalTokens * currentTokenPrice;
+    
+    // Step 2: Convert to SOL (current value / SOL price)
     const currentValueSOL = currentValueUSD / solPrice.price;
     
-    // Calculate gains/losses: Current value - total invested
+    // Step 3: P&L = current value - what we spent
     const totalInvested = strategy.totalInvested;
-    const currentValue = currentValueSOL; // This is the actual current value
-    const profitLoss = currentValueSOL - totalInvested; // P&L = current value - total invested
+    const profitLoss = currentValueSOL - totalInvested;
+    
+    // Log everything for debugging
+    logger.info(`[VALUE CALC] Strategy ${strategy.symbol}:`, {
+      totalTokens: strategy.totalTokens,
+      currentTokenPrice_USD: currentTokenPrice,
+      currentValueUSD: currentValueUSD,
+      solPrice_USD: solPrice.price,
+      currentValueSOL: currentValueSOL,
+      totalInvested_SOL: totalInvested,
+      profitLoss_SOL: profitLoss,
+      calculation: `${strategy.totalTokens} tokens * $${currentTokenPrice} = $${currentValueUSD} / $${solPrice.price} SOL = ${currentValueSOL} SOL`
+    });
     
     // Smart formatting: more decimals for values < 0.1, fewer for larger values
     const formatSOL = (value) => {
@@ -675,6 +689,8 @@ const handleViewStrategy = async (ctx) => {
       if (Math.abs(value) < 1) return value.toFixed(5);
       return value.toFixed(4); // Standard precision
     };
+    
+    const currentValue = currentValueSOL;
     
     // Calculate next buy trigger and sell trigger using the token's USD price
     const nextBuyTrigger = avgBuyPrice * (1 - strategy.dropPercentage / 100);
@@ -934,31 +950,53 @@ ${getBotTitle()}
    */
   const handleConfirmStopStrategy = async (ctx) => {
     const strategyId = ctx.match[1];
+    const userId = ctx.from.id;
     const martingaleService = ctx.services?.martingale;
+    
+    logger.info(`[STOP] Attempting to stop strategy ${strategyId} for user ${userId}`);
     
     const strategy = martingaleService.getStrategy(strategyId);
     if (!strategy) {
+      logger.error(`[STOP] Strategy ${strategyId} not found`);
       await ctx.answerCbQuery('❌ Strategy not found');
       return;
     }
   
+    logger.info(`[STOP] Found strategy ${strategyId}, current status: ${strategy.status}`);
+  
     try {
       // Update strategy status to stopped
+      const oldStatus = strategy.status;
       strategy.status = 'stopped';
       strategy.stoppedAt = new Date();
       strategy.stopReason = 'manual_stop';
+      strategy.isMonitoring = false;
       
-      // Stop monitoring and save
+      logger.info(`[STOP] Changed strategy ${strategyId} status from ${oldStatus} to ${strategy.status}`);
+      
+      // Stop monitoring
       await martingaleService.stopStrategyMonitoring(strategyId);
+      logger.info(`[STOP] Stopped monitoring for ${strategyId}`);
+      
+      // Force save to file
       martingaleService.saveStrategiesToFile();
+      logger.info(`[STOP] Saved strategies to file`);
+      
+      // Verify the strategy status actually changed
+      const verifyStrategy = martingaleService.getStrategy(strategyId);
+      logger.info(`[STOP] Verification - strategy ${strategyId} status is now: ${verifyStrategy.status}`);
       
       // Answer callback and redirect to active strategies
-      await ctx.answerCbQuery('✅ Strategy stopped successfully');
-      await handleActiveStrategies(ctx);
+      await ctx.answerCbQuery('✅ Strategy stopped');
+      
+      // Give a moment for save to complete, then redirect
+      setTimeout(async () => {
+        await handleActiveStrategies(ctx);
+      }, 500);
       
     } catch (error) {
-      logger.error(`Error stopping strategy ${strategyId}:`, error);
-      await ctx.answerCbQuery('❌ Error stopping strategy');
+      logger.error(`[STOP] Error stopping strategy ${strategyId}:`, error);
+      await ctx.answerCbQuery('❌ Error: ' + error.message);
     }
   };
 
