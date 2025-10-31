@@ -657,6 +657,13 @@ const handleViewStrategy = async (ctx) => {
     const currentValue = currentValueSOL; // This is the actual current value
     const profitLoss = currentValueSOL - totalInvested; // P&L = current value - total invested
     
+    // Smart formatting: more decimals for values < 0.1, fewer for larger values
+    const formatSOL = (value) => {
+      if (Math.abs(value) < 0.1) return value.toFixed(6); // Show more precision for small values
+      if (Math.abs(value) < 1) return value.toFixed(5);
+      return value.toFixed(4); // Standard precision
+    };
+    
     // Calculate next buy trigger and sell trigger using the token's USD price
     const nextBuyTrigger = avgBuyPrice * (1 - strategy.dropPercentage / 100);
     const sellTrigger = avgBuyPrice * (1 + strategy.profitTarget / 100);
@@ -678,9 +685,9 @@ ${getBotTitle()}
 📈 **Status:** ${getStatusEmoji(strategy.status)} ${strategy.status.toUpperCase()}
 
 💰 **Financial Summary:**
-• Total Invested: **${totalInvested.toFixed(4)} SOL**
-• Current Value: **${currentValue.toFixed(4)} SOL**
-• P&L: ${profitLoss >= 0 ? '🟢' : '🔴'} **${profitLoss >= 0 ? '+' : ''}${profitLoss.toFixed(4)} SOL**
+• Total Invested: **${formatSOL(totalInvested)} SOL**
+• Current Value: **${formatSOL(currentValue)} SOL**
+• P&L: ${profitLoss >= 0 ? '🟢' : '🔴'} **${profitLoss >= 0 ? '+' : ''}${formatSOL(profitLoss)} SOL**
 
 🤖 **Strategy Info:**
 • Level: **${strategy.currentLevel}/${strategy.maxLevels}**

@@ -28,23 +28,36 @@ module.exports = async (ctx) => {
       const activeStrategies = strategies.filter(s => s.status === 'active');
       
       if (activeStrategies.length > 0) {
-        const totalPnL = activeStrategies.reduce((total, strategy) => {
-          const currentValue = strategy.totalTokens * (strategy.highestPrice || 0);
-          const pnl = currentValue - strategy.totalInvested;
-          return total + pnl;
-        }, 0);
+        // Get SOL price for proper conversion
+        const solPriceData = await priceService.getSolanaPrice();
+        const solPrice = solPriceData.price || 200; // Fallback
         
-        const pnlPercentage = activeStrategies.reduce((total, strategy) => {
-          if (strategy.totalInvested === 0) return total;
-          const currentValue = strategy.totalTokens * (strategy.highestPrice || 0);
-          const roi = ((currentValue - strategy.totalInvested) / strategy.totalInvested) * 100;
-          return total + roi;
-        }, 0) / activeStrategies.length;
+        // Calculate PnL in SOL properly
+        const pnlResults = await Promise.all(activeStrategies.map(async (strategy) => {
+          let tokenPrice = strategy.averageBuyPrice || 0;
+          try {
+            const priceData = await priceService.getTokenPrice(strategy.tokenAddress);
+            tokenPrice = priceData.price || tokenPrice;
+          } catch (err) {
+            // Use stored price if fetch fails
+          }
+          
+          // Calculate current value in SOL: (tokens * token price USD) / SOL price USD
+          const currentValueUSD = strategy.totalTokens * tokenPrice;
+          const currentValueSOL = currentValueUSD / solPrice;
+          const pnl = currentValueSOL - strategy.totalInvested;
+          const roi = strategy.totalInvested > 0 ? (pnl / strategy.totalInvested * 100) : 0;
+          
+          return { pnl, roi };
+        }));
+        
+        const totalPnL = pnlResults.reduce((sum, result) => sum + result.pnl, 0);
+        const avgRoi = pnlResults.reduce((sum, result) => sum + result.roi, 0) / pnlResults.length;
         
         const pnlEmoji = totalPnL >= 0 ? '🟢' : '🔴';
         const sign = totalPnL >= 0 ? '+' : '';
         
-        strategiesText = `\n🤖 **Active Strategies:** ${activeStrategies.length} | ${pnlEmoji} ${sign}${totalPnL.toFixed(4)} SOL (${sign}${pnlPercentage.toFixed(1)}%)`;
+        strategiesText = `\n🤖 **Active Strategies:** ${activeStrategies.length} | ${pnlEmoji} ${sign}${totalPnL.toFixed(4)} SOL (${sign}${avgRoi.toFixed(1)}%)`;
       } else {
         strategiesText = '\n🤖 **Active Strategies:** 0';
       }
