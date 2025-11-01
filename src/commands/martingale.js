@@ -986,13 +986,11 @@ ${getBotTitle()}
       const verifyStrategy = martingaleService.getStrategy(strategyId);
       logger.info(`[STOP] Verification - strategy ${strategyId} status is now: ${verifyStrategy.status}`);
       
-      // Answer callback and redirect to active strategies
+      // Answer callback
       await ctx.answerCbQuery('✅ Strategy stopped');
       
-      // Give a moment for save to complete, then redirect
-      setTimeout(async () => {
-        await handleActiveStrategies(ctx);
-      }, 500);
+      // Redirect to active strategies
+      await handleActiveStrategies(ctx);
       
     } catch (error) {
       logger.error(`[STOP] Error stopping strategy ${strategyId}:`, error);
