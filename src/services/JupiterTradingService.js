@@ -589,14 +589,36 @@ class JupiterTradingService {
       const REVENUE_WALLET = 'BgvbtjrHc1ciRmrPkRBHG3cqcxh14qussJaFtTG1XArK';
       const connection = this.solanaService.connection;
       
+      // Check wallet balance first
+      const balance = await connection.getBalance(new PublicKey(wallet.publicKey));
+      const feeInLamports = Math.floor(feeAmount * 1e9);
+      const rentExemption = 5000; // 0.000005 SOL for rent exemption
+      
+      if (balance < feeInLamports + rentExemption) {
+        logger.warn(`Insufficient balance for fee collection:`, {
+          balance: balance / 1e9,
+          feeAmount,
+          required: (feeInLamports + rentExemption) / 1e9
+        });
+        return {
+          success: false,
+          error: 'Insufficient balance for fee'
+        };
+      }
+      
       // Create fee transfer transaction
       const transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: new PublicKey(wallet.publicKey),
           toPubkey: new PublicKey(REVENUE_WALLET),
-          lamports: Math.floor(feeAmount * 1e9) // Convert SOL to lamports
+          lamports: feeInLamports
         })
       );
+      
+      // Get recent blockhash
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = new PublicKey(wallet.publicKey);
       
       // Sign and send the fee transaction
       transaction.sign(wallet.keyPair);
@@ -604,6 +626,13 @@ class JupiterTradingService {
         skipPreflight: false,
         maxRetries: 2
       });
+      
+      // Wait for confirmation
+      await connection.confirmTransaction({
+        signature: feeSignature,
+        blockhash,
+        lastValidBlockHeight
+      }, 'confirmed');
       
       logger.info(`Platform fee collected:`, {
         amount: feeAmount,
