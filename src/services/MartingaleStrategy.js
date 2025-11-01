@@ -535,19 +535,20 @@ class MartingaleStrategy {
           });
         }
 
-        // Update strategy state
-        strategy.status = 'completed';
-        strategy.finalProfit = totalProfit;
-        strategy.finalProfitPercentage = finalProfitPercentage;
-        strategy.completedAt = new Date();
-        strategy.sellCycles = (strategy.sellCycles || 0) + 1; // Increment cycle counter
+        // Increment cycle counter
+        strategy.sellCycles = (strategy.sellCycles || 0) + 1;
+        strategy.lifetimeProfit = (strategy.lifetimeProfit || 0) + totalProfit;
+        strategy.lastCycleProfit = totalProfit;
+        strategy.lastCycleProfitPercentage = finalProfitPercentage;
+        strategy.lastCycleCompletedAt = new Date();
 
-        // Log strategy completion
+        // Log cycle completion
         if (this.tradingHistoryService) {
-          const duration = strategy.completedAt.getTime() - strategy.createdAt.getTime();
+          const duration = new Date().getTime() - strategy.createdAt.getTime();
           await this.tradingHistoryService.logStrategyEvent(strategy.userId, {
             strategyId: strategy.id,
-            type: 'completed',
+            type: 'cycle_completed',
+            cycle: strategy.sellCycles,
             tokenAddress: strategy.tokenAddress,
             symbol: strategy.symbol,
             totalInvested: strategy.totalInvested,
@@ -560,23 +561,31 @@ class MartingaleStrategy {
           });
         }
 
-        // Stop monitoring
-        await this.stopStrategyMonitoring(strategy.id);
-        this.saveStrategiesToFile();
-
-        logger.info(`Strategy ${strategy.id} completed successfully:`, {
+        logger.info(`Strategy ${strategy.id} completed cycle ${strategy.sellCycles}:`, {
           totalInvested: strategy.totalInvested,
           finalValue: sellResult.solReceived,
           profit: totalProfit,
-          profitPercentage: finalProfitPercentage
+          profitPercentage: finalProfitPercentage,
+          lifetimeProfit: strategy.lifetimeProfit
         });
 
-        // Start new strategy if configured for auto-restart
-        if (strategy.autoRestart) {
-          setTimeout(() => {
-            this.createMartingaleStrategy(strategy.userId, strategy);
-          }, strategy.cooldownPeriod);
-        }
+        // Reset strategy state for new cycle (INFINITE MARTINGALE)
+        strategy.currentLevel = 0;
+        strategy.totalInvested = 0;
+        strategy.netInvested = 0;
+        strategy.totalTokens = 0;
+        strategy.averageBuyPrice = 0;
+        strategy.lastBuyPrice = null;
+        strategy.highestPrice = null;
+        strategy.lowestPrice = null;
+        strategy.buyOrders = [];
+        strategy.status = 'active'; // Keep strategy active
+
+        this.saveStrategiesToFile();
+
+        // Execute initial buy for new cycle immediately
+        logger.info(`Starting cycle ${strategy.sellCycles + 1} for strategy ${strategy.id}`);
+        await this.executeInitialBuy(strategy);
 
       } else {
         sellOrder.status = 'failed';
