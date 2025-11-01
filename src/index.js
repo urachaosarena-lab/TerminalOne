@@ -180,20 +180,6 @@ class TerminalOneBot {
   }
 
   setupCallbacks() {
-    // DEBUG: Catch-all callback query handler
-    this.bot.on('callback_query', async (ctx, next) => {
-      const data = ctx.callbackQuery?.data;
-      console.log('[CALLBACK_QUERY] Received:', data);
-      if (data && data.includes('confirm_stop_strategy')) {
-        console.log('[CALLBACK_QUERY] This is a confirm_stop_strategy callback!');
-        console.log('[CALLBACK_QUERY] About to call next()');
-      }
-      await next();
-      if (data && data.includes('confirm_stop_strategy')) {
-        console.log('[CALLBACK_QUERY] After next() for confirm_stop_strategy');
-      }
-    });
-    
     // Wallet callbacks
     this.bot.action('create_wallet', walletHandlers.handleCreateWallet);
     this.bot.action('import_wallet', walletHandlers.handleImportWallet);
@@ -508,6 +494,20 @@ ${getBotTitle()}
         await ctx.answerCbQuery('🗑️ Message deleted');
       } catch (error) {
         await ctx.answerCbQuery('❌ Could not delete message');
+      }
+    });
+    
+    // DEBUG: Catch-all callback query handler (MUST BE LAST)
+    this.bot.on('callback_query', async (ctx, next) => {
+      const data = ctx.callbackQuery?.data;
+      console.log('[CALLBACK_QUERY] Received:', data);
+      if (data && data.includes('confirm_stop_strategy')) {
+        console.log('[CALLBACK_QUERY] This is a confirm_stop_strategy callback!');
+        console.log('[CALLBACK_QUERY] About to call next()');
+      }
+      await next();
+      if (data && data.includes('confirm_stop_strategy')) {
+        console.log('[CALLBACK_QUERY] After next() for confirm_stop_strategy');
       }
     });
   }
