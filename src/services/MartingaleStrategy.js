@@ -724,22 +724,22 @@ class MartingaleStrategy {
         netAmount: feeCalculation.netAmount
       });
       
-      // Check if we should use real trades or simulation
-      const useRealTrades = process.env.ENABLE_REAL_TRADES === 'true';
+      if (!this.tradingService) {
+        throw new Error('Trading service not available');
+      }
       
-      if (useRealTrades && this.tradingService) {
-        // Execute real Jupiter swap with net amount (after fee)
-        const jupiterResult = await this.tradingService.executeBuy(userId, {
-          tokenAddress: tokenAddress,
-          solAmount: feeCalculation.netAmount,
-          maxSlippage: maxSlippage
-        });
+      // Execute real Jupiter swap
+      const jupiterResult = await this.tradingService.executeBuy(userId, {
+        tokenAddress: tokenAddress,
+        solAmount: feeCalculation.netAmount,
+        maxSlippage: maxSlippage
+      });
       
       if (jupiterResult.success) {
         // Record revenue only on successful real trade
         await this.revenueService.recordRevenue(userId, jupiterResult.platformFee || feeCalculation.feeAmount);
         
-        logger.info(`Real Jupiter buy completed for user ${userId}:`, {
+        logger.info(`Jupiter buy completed for user ${userId}:`, {
           txHash: jupiterResult.txHash,
           solSpent: jupiterResult.solSpent,
           tokensReceived: jupiterResult.tokensReceived,
@@ -761,42 +761,6 @@ class MartingaleStrategy {
         throw new Error(jupiterResult.error || 'Jupiter swap failed');
       }
       
-      } else {
-        // Simulation mode - calculate realistic token amounts
-        logger.info('Using simulation mode for buy trade (set ENABLE_REAL_TRADES=true for real trading)');
-        logger.info('⚠️ NO FEES COLLECTED IN SIMULATION MODE');
-        
-        // Add some realistic slippage to the price
-        const actualPrice = expectedPrice * (1 + (Math.random() * 0.02 - 0.01)); // ±1% slippage
-        
-        // Get SOL price to convert SOL amount to USD value
-        const solPrice = await this.priceService.getSolanaPrice();
-        
-        // Calculate USD value of SOL we're spending (use original amount in simulation)
-        const usdValue = solAmount * solPrice.price;
-        
-        // Calculate tokens received: USD_value / token_price_in_USD
-        const tokensReceived = usdValue / actualPrice;
-        
-        logger.info(`Simulated buy trade:`, {
-          solAmount: solAmount,
-          solPriceUSD: solPrice.price,
-          usdValue: usdValue,
-          tokenPriceUSD: actualPrice,
-          tokensReceived: tokensReceived
-        });
-        
-        return {
-          success: true,
-          tokensReceived: tokensReceived,
-          actualPrice: actualPrice,
-          txHash: `sim_buy_${Date.now()}`,
-          platformFee: 0, // No fees in simulation
-          feePercentage: 0,
-          priceImpact: 0.5 // Simulated price impact
-        };
-      }
-      
     } catch (error) {
       logger.error('Error executing market buy with Jupiter:', error);
       return {
@@ -808,22 +772,22 @@ class MartingaleStrategy {
 
   async executeMarketSell(userId, { tokenAddress, tokenAmount, expectedPrice, maxSlippage = 1.0 }) {
     try {
-      // Check if we should use real trades or simulation
-      const useRealTrades = process.env.ENABLE_REAL_TRADES === 'true';
+      if (!this.tradingService) {
+        throw new Error('Trading service not available');
+      }
       
-      if (useRealTrades && this.tradingService) {
-        // Execute real Jupiter sell swap
-        const jupiterResult = await this.tradingService.executeSell(userId, {
-          tokenAddress: tokenAddress,
-          tokenAmount: tokenAmount,
-          maxSlippage: maxSlippage
-        });
+      // Execute real Jupiter sell swap
+      const jupiterResult = await this.tradingService.executeSell(userId, {
+        tokenAddress: tokenAddress,
+        tokenAmount: tokenAmount,
+        maxSlippage: maxSlippage
+      });
       
       if (jupiterResult.success) {
         // Record revenue only on successful real trade (fee already collected by JupiterTradingService)
         await this.revenueService.recordRevenue(userId, jupiterResult.platformFee);
         
-        logger.info(`Real Jupiter sell completed for user ${userId}:`, {
+        logger.info(`Jupiter sell completed for user ${userId}:`, {
           txHash: jupiterResult.txHash,
           tokensSold: jupiterResult.tokensSold,
           grossSolReceived: jupiterResult.grossSolReceived,
@@ -844,39 +808,6 @@ class MartingaleStrategy {
         };
       } else {
         throw new Error(jupiterResult.error || 'Jupiter sell failed');
-      }
-      
-      } else {
-        // Simulation mode - calculate realistic SOL amounts
-        logger.info('Using simulation mode for sell trade (set ENABLE_REAL_TRADES=true for real trading)');
-        logger.info('⚠️ NO FEES COLLECTED IN SIMULATION MODE');
-        
-        // Get SOL price for conversion
-        const solPrice = await this.priceService.getSolanaPrice();
-        
-        // Calculate USD value of tokens being sold with slippage
-        const usdValue = tokenAmount * expectedPrice * 0.99; // 1% slippage
-        
-        // Convert USD value to SOL (no fee deduction in simulation)
-        const grossSolAmount = usdValue / solPrice.price;
-        
-        logger.info(`Simulated sell trade:`, {
-          tokenAmount: tokenAmount,
-          tokenPriceUSD: expectedPrice,
-          usdValue: usdValue,
-          solPriceUSD: solPrice.price,
-          grossSolAmount: grossSolAmount
-        });
-        
-        return {
-          success: true,
-          solReceived: grossSolAmount, // Full amount in simulation (no fees)
-          actualPrice: expectedPrice * 0.99,
-          txHash: `sim_sell_${Date.now()}`,
-          platformFee: 0, // No fees in simulation
-          feePercentage: 0,
-          priceImpact: 0.5 // Simulated price impact
-        };
       }
       
     } catch (error) {
