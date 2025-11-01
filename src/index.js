@@ -101,6 +101,14 @@ class TerminalOneBot {
     this.bot.use((ctx, next) => {
       const messageText = ctx.message?.text || ctx.callbackQuery?.data || 'non-text message';
       logger.info(`Received from ${ctx.from?.username || ctx.from?.id}: ${messageText}`);
+      
+      // Debug logging for stop strategy callbacks
+      if (messageText && messageText.includes('confirm_stop_strategy')) {
+        console.log('====== MIDDLEWARE SAW STOP CALLBACK ======');
+        console.log('Callback data:', messageText);
+        console.log('==========================================');
+      }
+      
       return next();
     });
 
