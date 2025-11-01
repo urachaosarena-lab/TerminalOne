@@ -945,10 +945,10 @@ ${getBotTitle()}
   }
 };
 
-  /**
-   * Handle confirmed stop strategy
-   */
-  const handleConfirmStopStrategy = async (ctx) => {
+/**
+ * Handle confirmed stop strategy
+ */
+const handleConfirmStopStrategy = async (ctx) => {
     console.log('===== STOP HANDLER CALLED =====');
     console.log('ctx.match:', ctx.match);
     console.log('ctx.callbackQuery:', ctx.callbackQuery?.data);
@@ -1012,7 +1012,7 @@ ${getBotTitle()}
       logger.error(`[STOP] Error stopping strategy ${strategyId}:`, error);
       await ctx.answerCbQuery('❌ Error: ' + error.message);
     }
-  };
+};
 
 /**
  * Handle collect strategy rewards
