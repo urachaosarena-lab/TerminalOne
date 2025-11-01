@@ -949,19 +949,28 @@ ${getBotTitle()}
    * Handle confirmed stop strategy
    */
   const handleConfirmStopStrategy = async (ctx) => {
+    console.log('===== STOP HANDLER CALLED =====');
+    console.log('ctx.match:', ctx.match);
+    console.log('ctx.callbackQuery:', ctx.callbackQuery?.data);
+    
     const strategyId = ctx.match[1];
     const userId = ctx.from.id;
     const martingaleService = ctx.services?.martingale;
     
+    console.log(`[STOP] Strategy ID: ${strategyId}, User ID: ${userId}`);
     logger.info(`[STOP] Attempting to stop strategy ${strategyId} for user ${userId}`);
     
     const strategy = martingaleService.getStrategy(strategyId);
+    console.log(`[STOP] Strategy found:`, strategy ? 'YES' : 'NO');
+    
     if (!strategy) {
+      console.log(`[STOP] Strategy ${strategyId} NOT FOUND`);
       logger.error(`[STOP] Strategy ${strategyId} not found`);
       await ctx.answerCbQuery('❌ Strategy not found');
       return;
     }
   
+    console.log(`[STOP] Current status: ${strategy.status}`);
     logger.info(`[STOP] Found strategy ${strategyId}, current status: ${strategy.status}`);
   
     try {
@@ -972,27 +981,34 @@ ${getBotTitle()}
       strategy.stopReason = 'manual_stop';
       strategy.isMonitoring = false;
       
+      console.log(`[STOP] Status changed from ${oldStatus} to ${strategy.status}`);
       logger.info(`[STOP] Changed strategy ${strategyId} status from ${oldStatus} to ${strategy.status}`);
       
       // Stop monitoring
       await martingaleService.stopStrategyMonitoring(strategyId);
+      console.log(`[STOP] Monitoring stopped`);
       logger.info(`[STOP] Stopped monitoring for ${strategyId}`);
       
       // Force save to file
       martingaleService.saveStrategiesToFile();
+      console.log(`[STOP] Saved to file`);
       logger.info(`[STOP] Saved strategies to file`);
       
       // Verify the strategy status actually changed
       const verifyStrategy = martingaleService.getStrategy(strategyId);
+      console.log(`[STOP] Verification - status is now: ${verifyStrategy.status}`);
       logger.info(`[STOP] Verification - strategy ${strategyId} status is now: ${verifyStrategy.status}`);
       
       // Answer callback
       await ctx.answerCbQuery('✅ Strategy stopped');
+      console.log(`[STOP] Answered callback, now redirecting...`);
       
       // Redirect to active strategies
       await handleActiveStrategies(ctx);
+      console.log(`[STOP] Redirected to active strategies`);
       
     } catch (error) {
+      console.error(`[STOP] ERROR:`, error);
       logger.error(`[STOP] Error stopping strategy ${strategyId}:`, error);
       await ctx.answerCbQuery('❌ Error: ' + error.message);
     }
