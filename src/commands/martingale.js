@@ -876,11 +876,11 @@ const handlePauseStrategy = async (ctx) => {
   }
 
   if (martingaleService.pauseStrategy(strategyId)) {
-    await ctx.answerCbQuery('⏸️ Strategy paused successfully');
-    // Refresh the strategy view
-    await handleViewStrategy(ctx);
+    await ctx.answerCbQuery('⏸️ Strategy stopped successfully');
+    // Redirect to Active Strategies panel
+    await handleActiveStrategies(ctx);
   } else {
-    await ctx.answerCbQuery('❌ Could not pause strategy');
+    await ctx.answerCbQuery('❌ Could not stop strategy');
   }
 };
 

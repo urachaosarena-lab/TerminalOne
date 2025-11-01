@@ -724,9 +724,6 @@ class MartingaleStrategy {
         netAmount: feeCalculation.netAmount
       });
       
-      // Record the fee for revenue tracking
-      await this.revenueService.recordRevenue(userId, feeCalculation.feeAmount);
-      
       // Check if we should use real trades or simulation
       const useRealTrades = process.env.ENABLE_REAL_TRADES === 'true';
       
@@ -739,12 +736,16 @@ class MartingaleStrategy {
         });
       
       if (jupiterResult.success) {
+        // Record revenue only on successful real trade
+        await this.revenueService.recordRevenue(userId, jupiterResult.platformFee || feeCalculation.feeAmount);
+        
         logger.info(`Real Jupiter buy completed for user ${userId}:`, {
           txHash: jupiterResult.txHash,
           solSpent: jupiterResult.solSpent,
           tokensReceived: jupiterResult.tokensReceived,
           actualPrice: jupiterResult.actualPrice,
-          priceImpact: jupiterResult.priceImpact
+          priceImpact: jupiterResult.priceImpact,
+          platformFeeRecorded: jupiterResult.platformFee || feeCalculation.feeAmount
         });
         
         return {
@@ -752,7 +753,7 @@ class MartingaleStrategy {
           tokensReceived: jupiterResult.tokensReceived,
           actualPrice: jupiterResult.actualPrice,
           txHash: jupiterResult.txHash,
-          platformFee: feeCalculation.feeAmount,
+          platformFee: jupiterResult.platformFee || feeCalculation.feeAmount,
           feePercentage: feeCalculation.feePercentage,
           priceImpact: jupiterResult.priceImpact
         };
@@ -763,6 +764,7 @@ class MartingaleStrategy {
       } else {
         // Simulation mode - calculate realistic token amounts
         logger.info('Using simulation mode for buy trade (set ENABLE_REAL_TRADES=true for real trading)');
+        logger.info('⚠️ NO FEES COLLECTED IN SIMULATION MODE');
         
         // Add some realistic slippage to the price
         const actualPrice = expectedPrice * (1 + (Math.random() * 0.02 - 0.01)); // ±1% slippage
@@ -770,14 +772,14 @@ class MartingaleStrategy {
         // Get SOL price to convert SOL amount to USD value
         const solPrice = await this.priceService.getSolanaPrice();
         
-        // Calculate USD value of SOL we're spending
-        const usdValue = feeCalculation.netAmount * solPrice.price;
+        // Calculate USD value of SOL we're spending (use original amount in simulation)
+        const usdValue = solAmount * solPrice.price;
         
         // Calculate tokens received: USD_value / token_price_in_USD
         const tokensReceived = usdValue / actualPrice;
         
         logger.info(`Simulated buy trade:`, {
-          solAmount: feeCalculation.netAmount,
+          solAmount: solAmount,
           solPriceUSD: solPrice.price,
           usdValue: usdValue,
           tokenPriceUSD: actualPrice,
@@ -789,8 +791,8 @@ class MartingaleStrategy {
           tokensReceived: tokensReceived,
           actualPrice: actualPrice,
           txHash: `sim_buy_${Date.now()}`,
-          platformFee: feeCalculation.feeAmount,
-          feePercentage: feeCalculation.feePercentage,
+          platformFee: 0, // No fees in simulation
+          feePercentage: 0,
           priceImpact: 0.5 // Simulated price impact
         };
       }
@@ -818,28 +820,26 @@ class MartingaleStrategy {
         });
       
       if (jupiterResult.success) {
-        // Calculate platform fee on the SOL received
-        const feeCalculation = this.revenueService.calculateTransactionFee(jupiterResult.solReceived);
-        
-        // Record the fee for revenue tracking
-        await this.revenueService.recordRevenue(userId, feeCalculation.feeAmount);
+        // Record revenue only on successful real trade (fee already collected by JupiterTradingService)
+        await this.revenueService.recordRevenue(userId, jupiterResult.platformFee);
         
         logger.info(`Real Jupiter sell completed for user ${userId}:`, {
           txHash: jupiterResult.txHash,
           tokensSold: jupiterResult.tokensSold,
-          grossSolReceived: jupiterResult.solReceived,
-          platformFee: feeCalculation.feeAmount,
-          netSolReceived: feeCalculation.netAmount,
-          priceImpact: jupiterResult.priceImpact
+          grossSolReceived: jupiterResult.grossSolReceived,
+          platformFee: jupiterResult.platformFee,
+          netSolReceived: jupiterResult.solReceived,
+          priceImpact: jupiterResult.priceImpact,
+          platformFeeRecorded: jupiterResult.platformFee
         });
         
         return {
           success: true,
-          solReceived: feeCalculation.netAmount, // Net amount after platform fee
+          solReceived: jupiterResult.solReceived, // Already net amount after platform fee
           actualPrice: jupiterResult.actualPrice,
           txHash: jupiterResult.txHash,
-          platformFee: feeCalculation.feeAmount,
-          feePercentage: feeCalculation.feePercentage,
+          platformFee: jupiterResult.platformFee,
+          feePercentage: (jupiterResult.platformFee / jupiterResult.grossSolReceived) * 100,
           priceImpact: jupiterResult.priceImpact
         };
       } else {
@@ -849,6 +849,7 @@ class MartingaleStrategy {
       } else {
         // Simulation mode - calculate realistic SOL amounts
         logger.info('Using simulation mode for sell trade (set ENABLE_REAL_TRADES=true for real trading)');
+        logger.info('⚠️ NO FEES COLLECTED IN SIMULATION MODE');
         
         // Get SOL price for conversion
         const solPrice = await this.priceService.getSolanaPrice();
@@ -856,32 +857,24 @@ class MartingaleStrategy {
         // Calculate USD value of tokens being sold with slippage
         const usdValue = tokenAmount * expectedPrice * 0.99; // 1% slippage
         
-        // Convert USD value to SOL
+        // Convert USD value to SOL (no fee deduction in simulation)
         const grossSolAmount = usdValue / solPrice.price;
-        
-        // Calculate platform fee (1% of transaction)
-        const feeCalculation = this.revenueService.calculateTransactionFee(grossSolAmount);
-        
-        // Record the fee for revenue tracking
-        await this.revenueService.recordRevenue(userId, feeCalculation.feeAmount);
         
         logger.info(`Simulated sell trade:`, {
           tokenAmount: tokenAmount,
           tokenPriceUSD: expectedPrice,
           usdValue: usdValue,
           solPriceUSD: solPrice.price,
-          grossSolAmount: grossSolAmount,
-          feeAmount: feeCalculation.feeAmount,
-          netAmount: feeCalculation.netAmount
+          grossSolAmount: grossSolAmount
         });
         
         return {
           success: true,
-          solReceived: feeCalculation.netAmount, // Net amount after platform fee
+          solReceived: grossSolAmount, // Full amount in simulation (no fees)
           actualPrice: expectedPrice * 0.99,
           txHash: `sim_sell_${Date.now()}`,
-          platformFee: feeCalculation.feeAmount,
-          feePercentage: feeCalculation.feePercentage,
+          platformFee: 0, // No fees in simulation
+          feePercentage: 0,
           priceImpact: 0.5 // Simulated price impact
         };
       }
