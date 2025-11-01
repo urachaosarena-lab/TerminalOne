@@ -735,7 +735,7 @@ ${getBotTitle()}
   `;
 
   const keyboard = Markup.inlineKeyboard([
-    [Markup.button.callback('🛑 Stop Strategy', `stop_strategy_${strategy.id}`)],
+    [Markup.button.callback('🛑 Stop', `pause_strategy_${strategy.id}`)],
     [Markup.button.callback('🔄 Refresh', `view_strategy_${strategy.id}`), Markup.button.url('📊 DEXScreener', `https://dexscreener.com/solana/${strategy.tokenAddress}`)],
     [Markup.button.callback('🔙 Active Strategies', 'martingale_active')]
   ]);
