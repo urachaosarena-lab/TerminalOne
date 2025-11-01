@@ -207,7 +207,16 @@ class TerminalOneBot {
     this.bot.action(/view_strategy_(.+)/, martingaleHandlers.handleViewStrategy);
     this.bot.action(/pause_strategy_(.+)/, martingaleHandlers.handlePauseStrategy);
     this.bot.action(/stop_strategy_(.+)/, martingaleHandlers.handleStopStrategy);
-    this.bot.action(/confirm_stop_strategy_(.+)/, martingaleHandlers.handleConfirmStopStrategy);
+    
+    // Test inline handler for debugging
+    this.bot.action(/confirm_stop_strategy_(.+)/, async (ctx) => {
+      console.log('====== INLINE HANDLER CALLED ======')
+      console.log('Match:', ctx.match);
+      console.log('==================================');
+      // Call the actual handler
+      await martingaleHandlers.handleConfirmStopStrategy(ctx);
+    });
+    
     this.bot.action(/collect_strategy_rewards_(.+)/, martingaleHandlers.handleCollectStrategyRewards);
     
     // Preset callbacks
