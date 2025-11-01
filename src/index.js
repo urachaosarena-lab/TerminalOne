@@ -488,6 +488,13 @@ ${getBotTitle()}
         await ctx.answerCbQuery('❌ Could not delete message');
       }
     });
+    
+    // Catch-all for unmatched callback queries (MUST BE LAST)
+    this.bot.on('callback_query', async (ctx) => {
+      const data = ctx.callbackQuery?.data;
+      console.log('[UNMATCHED CALLBACK]:', data);
+      await ctx.answerCbQuery('⚠️ Action not recognized');
+    });
   }
 
   async handlePrivateKeyImport(ctx) {
