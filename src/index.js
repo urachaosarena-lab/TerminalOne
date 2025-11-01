@@ -101,14 +101,6 @@ class TerminalOneBot {
     this.bot.use((ctx, next) => {
       const messageText = ctx.message?.text || ctx.callbackQuery?.data || 'non-text message';
       logger.info(`Received from ${ctx.from?.username || ctx.from?.id}: ${messageText}`);
-      
-      // Debug logging for stop strategy callbacks
-      if (messageText && messageText.includes('confirm_stop_strategy')) {
-        console.log('====== MIDDLEWARE SAW STOP CALLBACK ======');
-        console.log('Callback data:', messageText);
-        console.log('==========================================');
-      }
-      
       return next();
     });
 
@@ -494,20 +486,6 @@ ${getBotTitle()}
         await ctx.answerCbQuery('🗑️ Message deleted');
       } catch (error) {
         await ctx.answerCbQuery('❌ Could not delete message');
-      }
-    });
-    
-    // DEBUG: Catch-all callback query handler (MUST BE LAST)
-    this.bot.on('callback_query', async (ctx, next) => {
-      const data = ctx.callbackQuery?.data;
-      console.log('[CALLBACK_QUERY] Received:', data);
-      if (data && data.includes('confirm_stop_strategy')) {
-        console.log('[CALLBACK_QUERY] This is a confirm_stop_strategy callback!');
-        console.log('[CALLBACK_QUERY] About to call next()');
-      }
-      await next();
-      if (data && data.includes('confirm_stop_strategy')) {
-        console.log('[CALLBACK_QUERY] After next() for confirm_stop_strategy');
       }
     });
   }
