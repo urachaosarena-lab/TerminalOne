@@ -14,12 +14,12 @@ class JupiterTradingService {
     // Jupiter API endpoints with fallback
     this.endpoints = {
       primary: {
-        quote: 'https://quote-api.jup.ag/v6/quote',
-        swap: 'https://quote-api.jup.ag/v6/swap'
+        quote: 'https://public.jupiterapi.com/quote',
+        swap: 'https://public.jupiterapi.com/swap'
       },
       fallback: {
-        quote: 'https://104.21.18.74/v6/quote',
-        swap: 'https://104.21.18.74/v6/swap'
+        quote: 'https://quote-api.jup.ag/v6/quote',
+        swap: 'https://quote-api.jup.ag/v6/swap'
       }
     };
     
