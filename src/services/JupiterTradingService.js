@@ -66,8 +66,6 @@ class JupiterTradingService {
     return delay + Math.random() * 1000; // Add jitter
   }
 
-  }
-
   /**
    * Check if error is non-retryable
    */
