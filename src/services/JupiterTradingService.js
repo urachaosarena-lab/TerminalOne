@@ -11,6 +11,12 @@ class JupiterTradingService {
     // Set DNS to Google DNS to avoid local DNS issues
     dns.setServers(['8.8.8.8', '8.8.4.4']);
     
+    // Request throttling to prevent rate limits
+    this.requestQueue = [];
+    this.isProcessingQueue = false;
+    this.minRequestInterval = 1000; // 1 second between Jupiter API requests
+    this.lastRequestTime = 0;
+    
     // Jupiter API endpoints with fallback
     this.endpoints = {
       primary: {
@@ -53,6 +59,24 @@ class JupiterTradingService {
    */
   async sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Throttle API requests to prevent rate limiting
+   */
+  async throttledRequest(requestFn) {
+    const now = Date.now();
+    const timeSinceLastRequest = now - this.lastRequestTime;
+    
+    // Wait if we're making requests too quickly
+    if (timeSinceLastRequest < this.minRequestInterval) {
+      const waitTime = this.minRequestInterval - timeSinceLastRequest;
+      logger.debug(`Throttling request: waiting ${waitTime}ms`);
+      await this.sleep(waitTime);
+    }
+    
+    this.lastRequestTime = Date.now();
+    return await requestFn();
   }
 
   /**
@@ -425,106 +449,110 @@ class JupiterTradingService {
    * Get quote from Jupiter API with fallback
    */
   async getJupiterQuote({ inputMint, outputMint, amount, slippageBps = 100 }) {
-    const params = {
-      inputMint,
-      outputMint,
-      amount,
-      slippageBps,
-      onlyDirectRoutes: false,
-      asLegacyTransaction: false,
-      maxAccounts: 64, // Limit accounts to avoid deprecated routes
-      minimizeSlippage: false, // Prioritize execution over minimal slippage
-      onlyTopMarkets: true // Use only reliable markets
-    };
-    
-    // Try primary endpoint first with longer timeout
-    try {
-      const response = await axios.get(this.endpoints.primary.quote, {
-        params,
-        timeout: 30000, // Increased from 15s to 30s
-        headers: {
-          'User-Agent': 'TerminalOne-Bot/1.0'
-        }
-      });
-      return response.data;
-    } catch (primaryError) {
-      logger.warn('Primary Jupiter endpoint failed, trying fallback:', primaryError.message);
+    return this.throttledRequest(async () => {
+      const params = {
+        inputMint,
+        outputMint,
+        amount,
+        slippageBps,
+        onlyDirectRoutes: false,
+        asLegacyTransaction: false,
+        maxAccounts: 64, // Limit accounts to avoid deprecated routes
+        minimizeSlippage: false, // Prioritize execution over minimal slippage
+        onlyTopMarkets: true // Use only reliable markets
+      };
       
-      // Try fallback endpoint
+      // Try primary endpoint first with longer timeout
       try {
-        const response = await axios.get(this.endpoints.fallback.quote, {
+        const response = await axios.get(this.endpoints.primary.quote, {
           params,
-          timeout: 30000, // Increased timeout
+          timeout: 30000, // Increased from 15s to 30s
           headers: {
-            'Host': 'quote-api.jup.ag',
             'User-Agent': 'TerminalOne-Bot/1.0'
           }
         });
         return response.data;
-      } catch (fallbackError) {
-        logger.error('Both Jupiter endpoints failed:', {
-          primary: primaryError.message,
-          fallback: fallbackError.message
-        });
-        return null;
+      } catch (primaryError) {
+        logger.warn('Primary Jupiter endpoint failed, trying fallback:', primaryError.message);
+        
+        // Try fallback endpoint
+        try {
+          const response = await axios.get(this.endpoints.fallback.quote, {
+            params,
+            timeout: 30000, // Increased timeout
+            headers: {
+              'Host': 'quote-api.jup.ag',
+              'User-Agent': 'TerminalOne-Bot/1.0'
+            }
+          });
+          return response.data;
+        } catch (fallbackError) {
+          logger.error('Both Jupiter endpoints failed:', {
+            primary: primaryError.message,
+            fallback: fallbackError.message
+          });
+          return null;
+        }
       }
-    }
+    });
   }
 
   /**
    * Get swap transaction from Jupiter with fallback
    */
   async getJupiterSwapTransaction(quote, userPublicKey) {
-    const swapData = {
-      quoteResponse: quote,
-      userPublicKey: userPublicKey,
-      wrapAndUnwrapSol: true,
-      useSharedAccounts: true,
-      // Add dynamic compute budget for complex swaps
-      dynamicComputeUnitLimit: true,
-      // Use ONLY prioritizationFeeLamports (mutually exclusive with computeUnitPriceMicroLamports)
-      prioritizationFeeLamports: 'auto' // Let Jupiter optimize priority fees automatically
-    };
-    
-    // Only add feeAccount if it's defined
-    if (process.env.FEE_ACCOUNT) {
-      swapData.feeAccount = process.env.FEE_ACCOUNT;
-    }
-    
-    // Try primary endpoint first with longer timeout
-    try {
-      const response = await axios.post(this.endpoints.primary.swap, swapData, {
-        headers: { 
-          'Content-Type': 'application/json',
-          'User-Agent': 'TerminalOne-Bot/1.0'
-        },
-        timeout: 30000 // Increased timeout to match quote endpoint
-      });
-      return response.data;
-    } catch (primaryError) {
-      logger.warn('Primary Jupiter swap endpoint failed, trying fallback:', primaryError.message);
+    return this.throttledRequest(async () => {
+      const swapData = {
+        quoteResponse: quote,
+        userPublicKey: userPublicKey,
+        wrapAndUnwrapSol: true,
+        useSharedAccounts: true,
+        // Add dynamic compute budget for complex swaps
+        dynamicComputeUnitLimit: true,
+        // Use ONLY prioritizationFeeLamports (mutually exclusive with computeUnitPriceMicroLamports)
+        prioritizationFeeLamports: 'auto' // Let Jupiter optimize priority fees automatically
+      };
       
-      // Try fallback endpoint
+      // Only add feeAccount if it's defined
+      if (process.env.FEE_ACCOUNT) {
+        swapData.feeAccount = process.env.FEE_ACCOUNT;
+      }
+      
+      // Try primary endpoint first with longer timeout
       try {
-        const response = await axios.post(this.endpoints.fallback.swap, swapData, {
+        const response = await axios.post(this.endpoints.primary.swap, swapData, {
           headers: { 
             'Content-Type': 'application/json',
-            'Host': 'quote-api.jup.ag',
             'User-Agent': 'TerminalOne-Bot/1.0'
           },
-          timeout: 30000 // Increased timeout
+          timeout: 30000 // Increased timeout to match quote endpoint
         });
         return response.data;
-      } catch (fallbackError) {
-        logger.error('Both Jupiter swap endpoints failed:', {
-          primary: primaryError.message,
-          fallback: fallbackError.message,
-          fallbackStatus: fallbackError.response?.status,
-          fallbackData: fallbackError.response?.data
-        });
-        return null;
+      } catch (primaryError) {
+        logger.warn('Primary Jupiter swap endpoint failed, trying fallback:', primaryError.message);
+        
+        // Try fallback endpoint
+        try {
+          const response = await axios.post(this.endpoints.fallback.swap, swapData, {
+            headers: { 
+              'Content-Type': 'application/json',
+              'Host': 'quote-api.jup.ag',
+              'User-Agent': 'TerminalOne-Bot/1.0'
+            },
+            timeout: 30000 // Increased timeout
+          });
+          return response.data;
+        } catch (fallbackError) {
+          logger.error('Both Jupiter swap endpoints failed:', {
+            primary: primaryError.message,
+            fallback: fallbackError.message,
+            fallbackStatus: fallbackError.response?.status,
+            fallbackData: fallbackError.response?.data
+          });
+          return null;
+        }
       }
-    }
+    });
   }
 
   /**
