@@ -272,7 +272,11 @@ class MartingaleStrategy {
    * Start monitoring the strategy for price movements
    */
   async startStrategyMonitoring(strategy) {
-    if (strategy.isMonitoring) return;
+    // Check if already being monitored with active interval
+    if (this.strategyMonitors.has(strategy.id)) {
+      logger.info(`Strategy ${strategy.id} is already being monitored`);
+      return;
+    }
 
     strategy.isMonitoring = true;
 
