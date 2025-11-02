@@ -99,7 +99,10 @@ class JupiterTradingService {
       'Insufficient balance',
       'Invalid token address',
       'Token not supported',
-      'Invalid amount'
+      'Invalid amount',
+      'Token account not found', // Token account doesn't exist
+      'Invalid public key', // Malformed addresses
+      'Account does not exist' // Account validation failed
     ];
     
     const errorMessage = error.message.toLowerCase();
@@ -112,10 +115,31 @@ class JupiterTradingService {
    * Check if error is RPC rate limit
    */
   isRateLimitError(error) {
-    const errorStr = error.message || '';
-    return errorStr.includes('429') || 
+    const errorStr = (error.message || '').toLowerCase();
+    const responseData = error.response?.data?.message || '';
+    const statusCode = error.response?.status;
+    
+    return statusCode === 429 ||
+           errorStr.includes('429') || 
            errorStr.includes('rate limit') ||
-           errorStr.includes('too many requests');
+           errorStr.includes('too many requests') ||
+           responseData.includes('rate limit');
+  }
+  
+  /**
+   * Check if error is Jupiter API issue (temporary)
+   */
+  isJupiterAPIError(error) {
+    const errorStr = (error.message || '').toLowerCase();
+    const statusCode = error.response?.status;
+    
+    // Jupiter API errors that should be retried
+    return statusCode >= 500 || // Server errors
+           errorStr.includes('enotfound') || // DNS issues
+           errorStr.includes('econnrefused') || // Connection refused
+           errorStr.includes('timeout') || // Timeout errors
+           errorStr.includes('network error') ||
+           errorStr.includes('socket hang up');
   }
 
   /**
@@ -150,9 +174,18 @@ class JupiterTradingService {
           // For RPC rate limits, use longer delay
           if (this.isRateLimitError(error)) {
             delay = Math.max(delay, 10000 + (attempt * 5000)); // Start at 10s, add 5s per attempt
-            logger.warn(`RPC rate limit detected, waiting ${delay}ms before retry`, {
+            logger.warn(`Rate limit detected, waiting ${delay}ms before retry`, {
               userId,
               attempt: attempt + 1
+            });
+          }
+          // For Jupiter API issues, use moderate delay
+          else if (this.isJupiterAPIError(error)) {
+            delay = Math.max(delay, 5000); // Minimum 5s for API issues
+            logger.warn(`Jupiter API error detected, waiting ${delay}ms before retry`, {
+              userId,
+              attempt: attempt + 1,
+              error: error.message
             });
           }
           
@@ -457,9 +490,11 @@ class JupiterTradingService {
         slippageBps,
         onlyDirectRoutes: false,
         asLegacyTransaction: false,
-        maxAccounts: 64, // Limit accounts to avoid deprecated routes
-        minimizeSlippage: false, // Prioritize execution over minimal slippage
-        onlyTopMarkets: true // Use only reliable markets
+        // Optimized for reliable execution
+        maxAccounts: 32, // Reduced from 64 - fewer accounts = more reliable routes
+        minimizeSlippage: true, // Enable for better price execution
+        onlyTopMarkets: true, // Use only reliable, high-liquidity markets
+        platformFeeBps: 0 // No platform fee at quote level (handled separately)
       };
       
       // Try primary endpoint first with longer timeout
@@ -487,9 +522,11 @@ class JupiterTradingService {
           });
           return response.data;
         } catch (fallbackError) {
-          logger.error('Both Jupiter endpoints failed:', {
+          logger.error('Both Jupiter quote endpoints failed:', {
             primary: primaryError.message,
-            fallback: fallbackError.message
+            fallback: fallbackError.message,
+            primaryStatus: primaryError.response?.status,
+            fallbackStatus: fallbackError.response?.status
           });
           return null;
         }
