@@ -66,6 +66,36 @@ class JupiterTradingService {
     return delay + Math.random() * 1000; // Add jitter
   }
 
+  }
+
+  /**
+   * Check if error is non-retryable
+   */
+  isNonRetryableError(error) {
+    const nonRetryablePatterns = [
+      'No wallet found',
+      'Insufficient balance',
+      'Invalid token address',
+      'Token not supported',
+      'Invalid amount'
+    ];
+    
+    const errorMessage = error.message.toLowerCase();
+    return nonRetryablePatterns.some(pattern => 
+      errorMessage.includes(pattern.toLowerCase())
+    );
+  }
+
+  /**
+   * Check if error is RPC rate limit
+   */
+  isRateLimitError(error) {
+    const errorStr = error.message || '';
+    return errorStr.includes('429') || 
+           errorStr.includes('rate limit') ||
+           errorStr.includes('too many requests');
+  }
+
   /**
    * Execute function with retry logic
    */
@@ -93,7 +123,17 @@ class JupiterTradingService {
         }
         
         if (attempt < this.retryConfig.maxRetries) {
-          const delay = this.calculateBackoffDelay(attempt);
+          let delay = this.calculateBackoffDelay(attempt);
+          
+          // For RPC rate limits, use longer delay
+          if (this.isRateLimitError(error)) {
+            delay = Math.max(delay, 10000 + (attempt * 5000)); // Start at 10s, add 5s per attempt
+            logger.warn(`RPC rate limit detected, waiting ${delay}ms before retry`, {
+              userId,
+              attempt: attempt + 1
+            });
+          }
+          
           logger.warn(`${operationName} failed, retrying in ${delay}ms:`, {
             userId,
             error: error.message,
@@ -111,26 +151,6 @@ class JupiterTradingService {
     }
     
     throw lastError;
-  }
-
-  /**
-   * Check if error is non-retryable
-   */
-  isNonRetryableError(error) {
-    const nonRetryablePatterns = [
-      'No wallet found',
-      'Insufficient balance',
-      'Invalid token address',
-      'Token not supported',
-      'Invalid amount',
-      'Slippage too high',
-      'Price impact too high'
-    ];
-    
-    const errorMessage = error.message.toLowerCase();
-    return nonRetryablePatterns.some(pattern => 
-      errorMessage.includes(pattern.toLowerCase())
-    );
   }
 
   /**
@@ -413,7 +433,10 @@ class JupiterTradingService {
       amount,
       slippageBps,
       onlyDirectRoutes: false,
-      asLegacyTransaction: false
+      asLegacyTransaction: false,
+      maxAccounts: 64, // Limit accounts to avoid deprecated routes
+      minimizeSlippage: false, // Prioritize execution over minimal slippage
+      onlyTopMarkets: true // Use only reliable markets
     };
     
     // Try primary endpoint first with longer timeout
