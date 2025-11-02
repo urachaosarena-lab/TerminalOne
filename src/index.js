@@ -333,6 +333,10 @@ class TerminalOneBot {
     // Battle callbacks
     this.bot.action('battle_start', battleHandlers.handleStartBattle);
     this.bot.action(/ability_(\d+)/, battleHandlers.handleSelectAbility);
+    this.bot.action(/target_(\d+)_(\d+)/, battleHandlers.handleSelectTarget);
+    this.bot.action('battle_back', battleHandlers.handleBackToAbilities);
+    this.bot.action('qte_tap', battleHandlers.handleQTETap);
+    this.bot.action('qte_finish', battleHandlers.handleQTEFinish);
     this.bot.action('battle_flee', battleHandlers.handleFleeBattle);
     this.bot.action('battle_collect', battleHandlers.handleCollectRewards);
     

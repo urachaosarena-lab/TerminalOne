@@ -29,9 +29,9 @@ function getVersion() {
 function getBotTitle(context = '') {
   const version = getVersion();
   if (context) {
-    return `🦈 **TerminalOne ${version}** - ${context}`;
+    return `🦈TerminalOne | v${version} | Hero Battles UPDATE!⚔️ - ${context}`;
   }
-  return `🦈 **TerminalOne ${version}**`;
+  return `🦈TerminalOne | v${version} | Hero Battles UPDATE!⚔️`;
 }
 
 module.exports = { getVersion, getBotTitle };

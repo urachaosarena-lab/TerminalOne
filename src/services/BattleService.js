@@ -56,10 +56,15 @@ class BattleService {
       enemies,
       turn: 1,
       selectedAbility: null,
+      selectedTarget: null,
       turnReady: false,
       battleLog: [],
       totalDamageDealt: 0,
-      totalDamageTaken: 0
+      totalDamageTaken: 0,
+      comboCount: 0,
+      qteActive: false,
+      qteCount: 0,
+      qteStartTime: null
     };
 
     this.activeBattles.set(userId, battle);
@@ -135,10 +140,59 @@ class BattleService {
     const hero = battle.team[0];
     if (abilityIndex >= 0 && abilityIndex < hero.abilities.length) {
       battle.selectedAbility = abilityIndex;
-      battle.turnReady = true;
+      const ability = hero.abilities[abilityIndex];
+      
+      // If not single-target damage ability, mark turn as ready
+      if (ability.target !== 'single' || ability.effect) {
+        battle.turnReady = true;
+      }
       return battle;
     }
     return null;
+  }
+
+  setTarget(userId, targetIndex) {
+    const battle = this.activeBattles.get(userId);
+    if (!battle) return null;
+
+    battle.selectedTarget = targetIndex;
+    
+    // 30% chance to trigger QTE
+    if (Math.random() < 0.3) {
+      battle.qteActive = true;
+      battle.qteCount = 0;
+      battle.qteStartTime = Date.now();
+      battle.turnReady = false; // Wait for QTE
+    } else {
+      battle.turnReady = true;
+    }
+    
+    return battle;
+  }
+
+  qteButtonPress(userId) {
+    const battle = this.activeBattles.get(userId);
+    if (!battle || !battle.qteActive) return null;
+
+    const elapsed = Date.now() - battle.qteStartTime;
+    if (elapsed > 3000) {
+      // QTE expired
+      battle.qteActive = false;
+      battle.turnReady = true;
+      return { expired: true, count: battle.qteCount };
+    }
+
+    battle.qteCount++;
+    return { expired: false, count: battle.qteCount };
+  }
+
+  qteFinish(userId) {
+    const battle = this.activeBattles.get(userId);
+    if (!battle) return null;
+
+    battle.qteActive = false;
+    battle.turnReady = true;
+    return battle;
   }
 
   executeTurn(userId) {
@@ -186,6 +240,7 @@ class BattleService {
     battle.turn++;
     battle.turnReady = false;
     battle.selectedAbility = null;
+    battle.selectedTarget = null;
 
     if (teamAlive === 0) {
       return this.endBattle(userId, false);
@@ -211,12 +266,37 @@ class BattleService {
     
     // Apply strength bonus
     const strengthBonus = attacker.strength ? attacker.strength * 0.5 : 0;
-    const finalDamage = Math.floor(baseDamage + strengthBonus);
+    let finalDamage = Math.floor(baseDamage + strengthBonus);
+    
+    // Apply combo bonus for hero
+    if (attacker.userId && battle.comboCount > 0) {
+      const comboBonus = Math.floor(finalDamage * (battle.comboCount * 0.1));
+      finalDamage += comboBonus;
+      battle.battleLog.push(`🔥 ${battle.comboCount}x COMBO! +${comboBonus} damage!`);
+    }
+    
+    // Apply QTE critical bonus for hero
+    if (attacker.userId && battle.qteCount > 0) {
+      const qteCritBonus = Math.floor(finalDamage * (battle.qteCount * 0.15));
+      finalDamage += qteCritBonus;
+      battle.battleLog.push(`💥 CRITICAL HIT! ${battle.qteCount} taps! +${qteCritBonus} damage!`);
+      battle.qteCount = 0; // Reset after use
+    }
 
     let targetList = [];
     if (ability.target === 'single') {
       const alive = targets.filter(t => t.hp > 0);
-      if (alive.length > 0) targetList = [alive[Math.floor(Math.random() * alive.length)]];
+      if (attacker.userId && battle.selectedTarget !== null) {
+        // Use player-selected target
+        const target = targets[battle.selectedTarget];
+        if (target && target.hp > 0) {
+          targetList = [target];
+        } else if (alive.length > 0) {
+          targetList = [alive[0]]; // Fallback if target dead
+        }
+      } else if (alive.length > 0) {
+        targetList = [alive[Math.floor(Math.random() * alive.length)]];
+      }
     } else if (ability.target === 'two') {
       const alive = targets.filter(t => t.hp > 0);
       targetList = alive.sort(() => 0.5 - Math.random()).slice(0, 2);
@@ -239,8 +319,12 @@ class BattleService {
       
       if (attacker.userId) {
         battle.totalDamageDealt += damage;
+        // Increase combo on successful hero hit
+        if (damage > 0) battle.comboCount++;
       } else if (target.userId) {
         battle.totalDamageTaken += damage;
+        // Break combo if hero gets hit
+        battle.comboCount = 0;
       }
     });
   }
