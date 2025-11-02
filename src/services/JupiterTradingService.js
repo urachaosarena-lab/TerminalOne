@@ -459,13 +459,10 @@ class JupiterTradingService {
       userPublicKey: userPublicKey,
       wrapAndUnwrapSol: true,
       useSharedAccounts: true,
-      // Use priority fees for faster transaction inclusion
-      computeUnitPriceMicroLamports: this.priorityFeeConfig.mode === 'auto' 
-        ? 'auto' 
-        : this.priorityFeeConfig.fallbackMicroLamports,
       // Add dynamic compute budget for complex swaps
       dynamicComputeUnitLimit: true,
-      prioritizationFeeLamports: 'auto' // Let Jupiter optimize priority fees
+      // Use ONLY prioritizationFeeLamports (mutually exclusive with computeUnitPriceMicroLamports)
+      prioritizationFeeLamports: 'auto' // Let Jupiter optimize priority fees automatically
     };
     
     // Only add feeAccount if it's defined
@@ -473,11 +470,14 @@ class JupiterTradingService {
       swapData.feeAccount = process.env.FEE_ACCOUNT;
     }
     
-    // Try primary endpoint first
+    // Try primary endpoint first with longer timeout
     try {
       const response = await axios.post(this.endpoints.primary.swap, swapData, {
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 15000
+        headers: { 
+          'Content-Type': 'application/json',
+          'User-Agent': 'TerminalOne-Bot/1.0'
+        },
+        timeout: 30000 // Increased timeout to match quote endpoint
       });
       return response.data;
     } catch (primaryError) {
@@ -488,9 +488,10 @@ class JupiterTradingService {
         const response = await axios.post(this.endpoints.fallback.swap, swapData, {
           headers: { 
             'Content-Type': 'application/json',
-            'Host': 'quote-api.jup.ag'
+            'Host': 'quote-api.jup.ag',
+            'User-Agent': 'TerminalOne-Bot/1.0'
           },
-          timeout: 15000
+          timeout: 30000 // Increased timeout
         });
         return response.data;
       } catch (fallbackError) {
