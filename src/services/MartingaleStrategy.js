@@ -897,13 +897,61 @@ class MartingaleStrategy {
   }
 
   /**
-   * Pause/resume strategy
+   * Pause strategy - now deletes strategy and saves to history
    */
-  pauseStrategy(strategyId) {
+  async pauseStrategy(strategyId) {
     const strategy = this.getStrategy(strategyId);
-    if (strategy && strategy.status === 'active') {
+    if (!strategy) return false;
+    
+    if (strategy.status === 'active') {
+      // Stop monitoring first
+      await this.stopStrategyMonitoring(strategyId);
+      
+      // Mark as paused and set timestamp
       strategy.status = 'paused';
+      strategy.pausedAt = new Date();
+      strategy.pauseReason = 'user_action';
+      
+      // Log to history if available
+      if (this.tradingHistoryService) {
+        const duration = strategy.pausedAt.getTime() - strategy.createdAt.getTime();
+        await this.tradingHistoryService.logStrategyEvent(strategy.userId, {
+          strategyId: strategy.id,
+          type: 'paused',
+          tokenAddress: strategy.tokenAddress,
+          symbol: strategy.symbol,
+          totalInvested: strategy.totalInvested,
+          currentValue: strategy.totalTokens * (strategy.averageBuyPrice || 0),
+          duration: duration,
+          tradesCount: strategy.buyOrders.length,
+          maxLevel: strategy.currentLevel,
+          pauseReason: 'user_action'
+        });
+      }
+      
+      // Remove from active strategies (delete it)
+      const userId = String(strategy.userId);
+      const userStrategies = this.activeStrategies.get(userId);
+      if (userStrategies) {
+        const index = userStrategies.findIndex(s => s.id === strategyId);
+        if (index !== -1) {
+          userStrategies.splice(index, 1);
+          
+          // Clean up empty user arrays
+          if (userStrategies.length === 0) {
+            this.activeStrategies.delete(userId);
+          }
+        }
+      }
+      
       this.saveStrategiesToFile();
+      
+      logger.info(`Strategy ${strategyId} paused and removed from active list`, {
+        userId: strategy.userId,
+        totalInvested: strategy.totalInvested,
+        totalTokens: strategy.totalTokens
+      });
+      
       return true;
     }
     return false;

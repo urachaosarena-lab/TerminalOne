@@ -30,12 +30,21 @@ class JupiterTradingService {
       'USDT': 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB'
     };
     
-    // Retry configuration
+    // Retry configuration - increased for better reliability
     this.retryConfig = {
-      maxRetries: 3,
-      baseDelay: 1000, // 1 second
-      maxDelay: 10000,  // 10 seconds
-      backoffMultiplier: 2
+      maxRetries: 5, // Increased from 3 to 5
+      baseDelay: 2000, // 2 seconds (increased from 1s)
+      maxDelay: 30000,  // 30 seconds (increased from 10s)
+      backoffMultiplier: 2,
+      slippageIncreasePerRetry: 2 // Increase slippage by 2% on each retry
+    };
+    
+    // Priority fee configuration for faster transactions
+    this.priorityFeeConfig = {
+      // Auto mode lets Jupiter determine optimal priority fee
+      mode: 'auto',
+      // Fallback to manual if auto fails (in micro-lamports)
+      fallbackMicroLamports: 100000 // 0.0001 SOL priority fee
     };
   }
 
@@ -128,7 +137,15 @@ class JupiterTradingService {
    * Execute a buy trade (SOL -> Token)
    */
   async executeBuy(userId, { tokenAddress, solAmount, maxSlippage = 3 }) {
+    let currentAttempt = 0;
+    
     return await this.executeWithRetry(async () => {
+      // Increase slippage progressively on retries
+      const adaptiveSlippage = maxSlippage + (currentAttempt * this.retryConfig.slippageIncreasePerRetry);
+      if (currentAttempt > 0) {
+        logger.info(`Retry attempt ${currentAttempt}: Increasing slippage to ${adaptiveSlippage}%`, { userId });
+      }
+      currentAttempt++;
       const walletData = this.walletService.getUserWallet(userId);
       if (!walletData) {
         throw new Error('No wallet found for user');
@@ -153,13 +170,13 @@ class JupiterTradingService {
         maxSlippage
       });
 
-      // Get quote from Jupiter with retry
+      // Get quote from Jupiter with adaptive slippage
       const quote = await this.executeWithRetry(
         () => this.getJupiterQuote({
           inputMint: this.tokenMints.SOL, // SOL
           outputMint: tokenAddress,
           amount: lamportsAmount,
-          slippageBps: maxSlippage * 100 // Convert to basis points
+          slippageBps: adaptiveSlippage * 100 // Convert to basis points with adaptive slippage
         }),
         'Jupiter Quote (Buy)',
         userId
@@ -188,13 +205,13 @@ class JupiterTradingService {
         netAmount: netSolAmount
       });
       
-      // Update quote with net amount (after fee) with retry
+      // Update quote with net amount (after fee) with adaptive slippage
       const netQuote = await this.executeWithRetry(
         () => this.getJupiterQuote({
           inputMint: this.tokenMints.SOL,
           outputMint: tokenAddress,
           amount: Math.floor(netSolAmount * 1e9),
-          slippageBps: maxSlippage * 100
+          slippageBps: adaptiveSlippage * 100 // Use adaptive slippage
         }),
         'Jupiter Net Quote (Buy)',
         userId
@@ -272,7 +289,15 @@ class JupiterTradingService {
    * Execute a sell trade (Token -> SOL)
    */
   async executeSell(userId, { tokenAddress, tokenAmount, maxSlippage = 3 }) {
+    let currentAttempt = 0;
+    
     return await this.executeWithRetry(async () => {
+      // Increase slippage progressively on retries
+      const adaptiveSlippage = maxSlippage + (currentAttempt * this.retryConfig.slippageIncreasePerRetry);
+      if (currentAttempt > 0) {
+        logger.info(`Retry attempt ${currentAttempt}: Increasing slippage to ${adaptiveSlippage}%`, { userId });
+      }
+      currentAttempt++;
       const walletData = this.walletService.getUserWallet(userId);
       if (!walletData) {
         throw new Error('No wallet found for user');
@@ -297,13 +322,13 @@ class JupiterTradingService {
         maxSlippage
       });
 
-      // Get quote from Jupiter with retry
+      // Get quote from Jupiter with adaptive slippage
       const quote = await this.executeWithRetry(
         () => this.getJupiterQuote({
           inputMint: tokenAddress,
           outputMint: this.tokenMints.SOL, // SOL
           amount: tokenAmountLamports,
-          slippageBps: maxSlippage * 100
+          slippageBps: adaptiveSlippage * 100 // Use adaptive slippage
         }),
         'Jupiter Quote (Sell)',
         userId
@@ -391,11 +416,14 @@ class JupiterTradingService {
       asLegacyTransaction: false
     };
     
-    // Try primary endpoint first
+    // Try primary endpoint first with longer timeout
     try {
       const response = await axios.get(this.endpoints.primary.quote, {
         params,
-        timeout: 15000
+        timeout: 30000, // Increased from 15s to 30s
+        headers: {
+          'User-Agent': 'TerminalOne-Bot/1.0'
+        }
       });
       return response.data;
     } catch (primaryError) {
@@ -405,9 +433,10 @@ class JupiterTradingService {
       try {
         const response = await axios.get(this.endpoints.fallback.quote, {
           params,
-          timeout: 15000,
+          timeout: 30000, // Increased timeout
           headers: {
-            'Host': 'quote-api.jup.ag'
+            'Host': 'quote-api.jup.ag',
+            'User-Agent': 'TerminalOne-Bot/1.0'
           }
         });
         return response.data;
@@ -430,7 +459,13 @@ class JupiterTradingService {
       userPublicKey: userPublicKey,
       wrapAndUnwrapSol: true,
       useSharedAccounts: true,
-      computeUnitPriceMicroLamports: 'auto'
+      // Use priority fees for faster transaction inclusion
+      computeUnitPriceMicroLamports: this.priorityFeeConfig.mode === 'auto' 
+        ? 'auto' 
+        : this.priorityFeeConfig.fallbackMicroLamports,
+      // Add dynamic compute budget for complex swaps
+      dynamicComputeUnitLimit: true,
+      prioritizationFeeLamports: 'auto' // Let Jupiter optimize priority fees
     };
     
     // Only add feeAccount if it's defined
