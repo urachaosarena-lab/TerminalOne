@@ -78,9 +78,12 @@ class GridTradingService {
       }
       
       // Check wallet balance
-      const balance = await this.walletService.getBalance(userId);
-      if (balance < config.initialAmount) {
-        throw new Error(`Insufficient balance. Required: ${config.initialAmount} SOL, Available: ${balance} SOL`);
+      const balanceInfo = await this.walletService.getWalletBalance(userId);
+      if (!balanceInfo.hasWallet) {
+        throw new Error('No wallet found');
+      }
+      if (balanceInfo.balance < config.initialAmount) {
+        throw new Error(`Insufficient balance. Required: ${config.initialAmount} SOL, Available: ${balanceInfo.balance.toFixed(4)} SOL`);
       }
       
       // Get current token price
