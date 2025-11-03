@@ -7,6 +7,7 @@ const EnhancedPriceService = require('./services/EnhancedPriceService');
 const RealtimePriceService = require('./services/RealtimePriceService');
 const TokenAnalysisService = require('./services/TokenAnalysisService');
 const MartingaleStrategy = require('./services/MartingaleStrategy');
+const GridTradingService = require('./services/GridTradingService');
 const RevenueService = require('./services/RevenueService');
 const JupiterTradingService = require('./services/JupiterTradingService');
 const TradingHistoryService = require('./services/TradingHistoryService');
@@ -24,6 +25,7 @@ const startCommand = require('./commands/start');
 const helpCommand = require('./commands/help');
 const walletHandlers = require('./commands/wallet');
 const martingaleHandlers = require('./commands/martingale');
+const gridHandlers = require('./commands/grid');
 const heroHandlers = require('./commands/hero');
 const battleHandlers = require('./commands/battle');
 const dashboardHandlers = require('./commands/dashboard');
@@ -56,6 +58,13 @@ class TerminalOneBot {
       this.jupiterTradingService, // real trading service
       this.revenueService, // revenue service for fee collection
       this.tradingHistoryService // trading history service for analytics
+    );
+    
+    // Grid trading service
+    this.gridTradingService = new GridTradingService(
+      this.jupiterTradingService,
+      this.enhancedPriceService,
+      this.walletService
     );
     
     // RPG Game services
@@ -113,6 +122,7 @@ class TerminalOneBot {
         wallet: this.walletService,
         tokenAnalysis: this.tokenAnalysisService,
         martingale: this.martingaleService,
+        grid: this.gridTradingService,
         jupiter: this.jupiterTradingService,
         revenue: this.revenueService,
         tradingHistory: this.tradingHistoryService,
@@ -159,8 +169,18 @@ class TerminalOneBot {
         return;
       }
       
+      if (ctx.session?.awaitingGridToken) {
+        await gridHandlers.handleTokenAnalysis(ctx);
+        return;
+      }
+      
       if (ctx.session?.awaitingConfigValue) {
         await martingaleHandlers.handleConfigValueInput(ctx);
+        return;
+      }
+      
+      if (ctx.session?.awaitingGridConfig) {
+        await gridHandlers.handleConfigValueInput(ctx);
         return;
       }
       
@@ -229,6 +249,21 @@ class TerminalOneBot {
     this.bot.action('martingale_history', martingaleHandlers.handleTradingHistory);
     this.bot.action('history_analytics', martingaleHandlers.handleDetailedAnalytics);
     this.bot.action('history_export', martingaleHandlers.handleExportReport);
+    
+    // Grid trading callbacks
+    this.bot.action('grid_menu', gridHandlers.handleGridMenu);
+    this.bot.action('grid_configure', gridHandlers.handleConfigurationMenu);
+    this.bot.action('grid_launch', gridHandlers.handleLaunchMenu);
+    this.bot.action('grid_active', gridHandlers.handleActiveGrids);
+    this.bot.action(/grid_view_(.+)/, gridHandlers.handleViewGrid);
+    this.bot.action(/grid_stop_(.+)/, gridHandlers.handleStopGrid);
+    
+    // Grid configuration callbacks
+    this.bot.action('grid_config_initial', (ctx) => gridHandlers.handleConfigChange(ctx, 'initial'));
+    this.bot.action('grid_config_buys', (ctx) => gridHandlers.handleConfigChange(ctx, 'buys'));
+    this.bot.action('grid_config_sells', (ctx) => gridHandlers.handleConfigChange(ctx, 'sells'));
+    this.bot.action('grid_config_drop', (ctx) => gridHandlers.handleConfigChange(ctx, 'drop'));
+    this.bot.action('grid_config_leap', (ctx) => gridHandlers.handleConfigChange(ctx, 'leap'));
     
     // Hero/RPG callbacks
     this.bot.action('hero_menu', heroHandlers.handleHeroMenu);
@@ -403,7 +438,7 @@ ${balanceInfo}${activeStrategiesInfo}
 
 🎯 **Available Strategies:**
 • **Martingale Bot:** DCA with multipliers
-• **Grid Web:** Advanced grid trading
+• **Grid Trading:** Automated buy low, sell high
 • **Yeet Assistant:** AI-powered trades
       `;
       
@@ -411,39 +446,13 @@ ${balanceInfo}${activeStrategiesInfo}
         parse_mode: 'Markdown',
         ...require('telegraf').Markup.inlineKeyboard([
           [require('telegraf').Markup.button.callback('🤖 Martingale Bot', 'martingale_menu')],
-          [require('telegraf').Markup.button.callback('🕸️ Grid Web', 'grid_web'), require('telegraf').Markup.button.callback('🚀 Yeet Assistant', 'yeet_assistant')],
+          [require('telegraf').Markup.button.callback('📊 Grid Trading', 'grid_menu'), require('telegraf').Markup.button.callback('🚀 Yeet Assistant', 'yeet_assistant')],
           [require('telegraf').Markup.button.callback('🔙 Back to Main', 'back_to_main')]
         ])
       });
     });
     
     // Under construction features
-    this.bot.action('grid_web', async (ctx) => {
-      const message = `
-${getBotTitle()}
-
-🕸️ **Grid Web Trading**
-
-🚧 **Under Construction** 🚧
-
-🔥 **Coming Soon:**
-• 🕸️ Advanced grid trading strategies
-• 🌐 Web-based trading interface
-• 🧮 Multiple grid configurations
-• 📈 Real-time grid performance tracking
-• 🐍 Automated profit taking
-
-📧 **Get notified when ready!**
-      `;
-      
-      await ctx.editMessageText(message, {
-        parse_mode: 'Markdown',
-        ...require('telegraf').Markup.inlineKeyboard([
-          [require('telegraf').Markup.button.callback('🔔 Notify Me', 'notify_grid_web')],
-          [require('telegraf').Markup.button.callback('🤖 Back to Strategies', 'strategies_menu'), require('telegraf').Markup.button.callback('🔙 Main Menu', 'back_to_main')]
-        ])
-      });
-    });
     
     this.bot.action('yeet_assistant', async (ctx) => {
       const message = `
