@@ -7,38 +7,52 @@ const logger = require('../utils/logger');
  */
 async function handleGridMenu(ctx) {
   const userId = ctx.from.id;
-  const config = ctx.services.grid.getUserConfig(userId);
-  const activeGrids = ctx.services.grid.getUserActiveGrids(userId);
+  const gridService = ctx.services?.grid;
+  const walletService = ctx.services?.wallet;
+  
+  if (!gridService) {
+    await ctx.reply('❌ Grid service not available');
+    return;
+  }
+
+  // Get SOL balance
+  let balanceText = '';
+  if (walletService) {
+    const balance = await walletService.getWalletBalance(userId);
+    balanceText = balance.hasWallet ? `💰 **Balance:** ${balance.balance.toFixed(4)} SOL` : '💰 **No Wallet Connected**';
+  }
+
+  // Get user's active grids
+  const activeGrids = gridService.getUserActiveGrids(userId);
+  const activeCount = activeGrids.length;
+  
+  // Get user's current configuration
+  const config = gridService.getUserConfig(userId);
   
   const message = `
 ${getBotTitle()}
 
-📊 **GRID TRADING**
+🕸️ **Grid Trading**
 
-Grid trading automatically buys low and sells high using preset price levels. Perfect for range-bound markets!
+${balanceText}
 
-**Your Configuration:**
+📊 **Current Configuration:**
 💰 Initial Amount: **${config.initialAmount} SOL**
 📉 Buy Orders: **${config.numBuys}** (${config.dropPercent}% apart)
 📈 Sell Orders: **${config.numSells}** (${config.leapPercent}% apart)
 
-**Active Grids:** ${activeGrids.length}
+📊 Max Drop: **${(config.dropPercent * config.numBuys).toFixed(1)}%**
+🚀 Max Leap: **${(config.leapPercent * config.numSells).toFixed(1)}%**
+📈 **Active Grids:** ${activeCount}
 
-🎯 **How It Works:**
-1. Bot buys 50% of initial amount
-2. Sets ${config.numBuys} buy orders below entry
-3. Sets ${config.numSells} sell orders above entry
-4. Executes trades when price hits levels
-5. Runs 24/7 until you stop it
-
-⚠️ **Risk:** Grid works best in sideways markets. Trending markets may cause losses.
+🚀 Ready to profit from volatility?
   `.trim();
   
   const keyboard = Markup.inlineKeyboard([
-    [Markup.button.callback('⚙️ Configure', 'grid_configure')],
-    [Markup.button.callback('🚀 Launch Grid', 'grid_launch')],
+    [Markup.button.callback('⚙️ Configure Strategy', 'grid_configure')],
+    [Markup.button.callback('🔍 Search Token & Launch', 'grid_launch')],
     [Markup.button.callback('📊 Active Grids', 'grid_active')],
-    [Markup.button.callback('🔙 Main Menu', 'back_to_main')]
+    [Markup.button.callback('🤖 Back to Strategies', 'strategies_menu'), Markup.button.callback('🔙 Main Menu', 'back_to_main')]
   ]);
   
   if (ctx.callbackQuery) {
@@ -65,39 +79,47 @@ async function handleConfigurationMenu(ctx) {
   const message = `
 ${getBotTitle()}
 
-⚙️ **GRID CONFIGURATION**
+⚙️ **Grid Trading Configuration**
 
-**Current Settings:**
-
+🔧 **Current Settings:**
 💰 **Initial Amount:** ${config.initialAmount} SOL
-   └ Range: 0.04 - 100 SOL
-
 📉 **Buy Orders:** ${config.numBuys}
-   └ Range: 2 - 50 orders
-
 📈 **Sell Orders:** ${config.numSells}
-   └ Range: 2 - 50 orders
-
 📊 **Drop %:** ${config.dropPercent}%
-   └ Space between buy orders (0.2% - 33%)
-
 🚀 **Leap %:** ${config.leapPercent}%
-   └ Space between sell orders (0.2% - 100%)
 
-Select a parameter to change:
+📊 **Grid Coverage:**
+📉 Max Drop: **${(config.dropPercent * config.numBuys).toFixed(1)}%**
+📈 Max Leap: **${(config.leapPercent * config.numSells).toFixed(1)}%**
+
+💰 **Investment:** ${config.initialAmount} SOL (${(config.initialAmount / 2).toFixed(3)} SOL initial buy + ${(config.initialAmount / 2).toFixed(3)} SOL for buys)
+
+⚠️ This is the total SOL reserved for grid trading.
   `.trim();
   
-  await ctx.editMessageText(message, {
-    parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard([
-      [Markup.button.callback('💰 Initial Amount', 'grid_config_initial')],
-      [Markup.button.callback('📉 Buy Orders', 'grid_config_buys')],
-      [Markup.button.callback('📈 Sell Orders', 'grid_config_sells')],
-      [Markup.button.callback('📊 Drop %', 'grid_config_drop')],
-      [Markup.button.callback('🚀 Leap %', 'grid_config_leap')],
-      [Markup.button.callback('🔙 Back', 'grid_menu')]
-    ])
-  });
+  const keyboard = Markup.inlineKeyboard([
+    [Markup.button.callback('💰 Initial Amount', 'grid_config_initial'), Markup.button.callback('📉 Buy Orders', 'grid_config_buys')],
+    [Markup.button.callback('📈 Sell Orders', 'grid_config_sells'), Markup.button.callback('📊 Drop %', 'grid_config_drop')],
+    [Markup.button.callback('🚀 Leap %', 'grid_config_leap')],
+    [Markup.button.callback('🔄 Reset to Defaults', 'grid_config_reset')],
+    [Markup.button.callback('🔙 Back', 'grid_menu')]
+  ]);
+
+  try {
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      ...keyboard
+    });
+  } catch (error) {
+    if (error.description?.includes('message to edit not found')) {
+      await ctx.reply(message, {
+        parse_mode: 'Markdown',
+        ...keyboard
+      });
+    } else {
+      throw error;
+    }
+  }
   
   await ctx.answerCbQuery();
 }
@@ -180,41 +202,35 @@ async function handleConfigValueInput(ctx) {
  * Grid Launch Menu
  */
 async function handleLaunchMenu(ctx) {
-  const userId = ctx.from.id;
-  const config = ctx.services.grid.getUserConfig(userId);
-  const balance = await ctx.services.wallet.getBalance(userId);
-  
   const message = `
 ${getBotTitle()}
 
-🚀 **LAUNCH GRID**
+🔍 **Token Analysis & Launch**
 
-**Configuration:**
-💰 Initial Amount: ${config.initialAmount} SOL
-📉 Buy Orders: ${config.numBuys} (${config.dropPercent}% apart)
-📈 Sell Orders: ${config.numSells} (${config.leapPercent}% apart)
+📝 **Enter token ticker or address:**
 
-**Wallet Balance:** ${balance.toFixed(4)} SOL
+**Examples:**
+• \`SOL\` - Solana
+• \`BONK\` - Bonk token
+• \`EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v\` - USDC address
 
-**Next Steps:**
-1. Send the token address you want to grid trade
-2. Bot will execute initial buy (50% = ${(config.initialAmount / 2).toFixed(3)} SOL)
-3. Set up ${config.numBuys} buy and ${config.numSells} sell orders
-4. Monitor and execute trades automatically
+💡 **Tip:** Grid trading works best for:
+• Tokens with high volatility
+• Range-bound price action
+• Adequate liquidity
 
-⚠️ Make sure you have at least **${config.initialAmount} SOL** in your wallet.
-
-Send token address to continue:
+🚀 **Send the token now!**
   `.trim();
-  
+
   await ctx.editMessageText(message, {
     parse_mode: 'Markdown',
     ...Markup.inlineKeyboard([
-      [Markup.button.callback('🔙 Back', 'grid_menu')]
+      [Markup.button.callback('❌ Cancel', 'grid_menu')]
     ])
   });
-  
-  await ctx.answerCbQuery();
+
+  // Set user state for token input
+  ctx.session = ctx.session || {};
   ctx.session.awaitingGridToken = true;
 }
 
@@ -443,11 +459,30 @@ Grid monitoring has been stopped. You can still view the grid history.
   }
 }
 
+/**
+ * Reset configuration to defaults
+ */
+async function handleResetConfig(ctx) {
+  const userId = ctx.from.id;
+  const gridService = ctx.services?.grid;
+  
+  // Reset to defaults
+  gridService.getUserConfig(userId).initialAmount = 0.10;
+  gridService.getUserConfig(userId).numBuys = 10;
+  gridService.getUserConfig(userId).numSells = 10;
+  gridService.getUserConfig(userId).dropPercent = 2;
+  gridService.getUserConfig(userId).leapPercent = 4;
+  
+  await ctx.answerCbQuery('✅ Configuration reset to defaults!');
+  await handleConfigurationMenu(ctx);
+}
+
 module.exports = {
   handleGridMenu,
   handleConfigurationMenu,
   handleConfigChange,
   handleConfigValueInput,
+  handleResetConfig,
   handleLaunchMenu,
   handleTokenAnalysis,
   handleActiveGrids,

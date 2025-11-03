@@ -264,6 +264,7 @@ class TerminalOneBot {
     this.bot.action('grid_config_sells', (ctx) => gridHandlers.handleConfigChange(ctx, 'sells'));
     this.bot.action('grid_config_drop', (ctx) => gridHandlers.handleConfigChange(ctx, 'drop'));
     this.bot.action('grid_config_leap', (ctx) => gridHandlers.handleConfigChange(ctx, 'leap'));
+    this.bot.action('grid_config_reset', gridHandlers.handleResetConfig);
     
     // Hero/RPG callbacks
     this.bot.action('hero_menu', heroHandlers.handleHeroMenu);
@@ -438,7 +439,7 @@ ${balanceInfo}${activeStrategiesInfo}
 
 🎯 **Available Strategies:**
 • **Martingale Bot:** DCA with multipliers
-• **Grid Trading:** Automated buy low, sell high
+• **🕸️ Grid Trading:** Automated buy low, sell high
 • **Yeet Assistant:** AI-powered trades
       `;
       
@@ -446,7 +447,7 @@ ${balanceInfo}${activeStrategiesInfo}
         parse_mode: 'Markdown',
         ...require('telegraf').Markup.inlineKeyboard([
           [require('telegraf').Markup.button.callback('🤖 Martingale Bot', 'martingale_menu')],
-          [require('telegraf').Markup.button.callback('📊 Grid Trading', 'grid_menu'), require('telegraf').Markup.button.callback('🚀 Yeet Assistant', 'yeet_assistant')],
+          [require('telegraf').Markup.button.callback('🕸️ Grid Trading', 'grid_menu'), require('telegraf').Markup.button.callback('🚀 Yeet Assistant', 'yeet_assistant')],
           [require('telegraf').Markup.button.callback('🔙 Back to Main', 'back_to_main')]
         ])
       });
