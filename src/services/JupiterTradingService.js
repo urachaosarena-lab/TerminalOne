@@ -268,37 +268,44 @@ class JupiterTradingService {
         priceImpactPct: quote.priceImpactPct
       });
 
-      // Calculate and collect platform fee before swap
-      const feeAmount = solAmount * 0.01; // 1% fee
-      const netSolAmount = solAmount - Math.max(feeAmount, 0.0005); // Minimum 0.0005 SOL fee
-      const actualFee = solAmount - netSolAmount;
+      // Check wallet balance first - CRITICAL!
+      const walletBalance = await this.solanaService.executeWithFailover(
+        (conn) => conn.getBalance(new PublicKey(wallet.publicKey)),
+        'Get Wallet Balance'
+      );
       
-      // Log fee collection
-      logger.info(`Collecting platform fee for user ${userId}:`, {
+      const MIN_RENT_EXEMPT = 0.00203928; // ~2,039,280 lamports for token account
+      const MIN_TRANSACTION_FEE = 0.000005; // ~5,000 lamports
+      const MINIMUM_BALANCE_NEEDED = lamportsAmount / 1e9 + MIN_RENT_EXEMPT + MIN_TRANSACTION_FEE;
+      
+      logger.info(`Balance check for user ${userId}:`, {
+        walletBalance: walletBalance / 1e9,
+        required: MINIMUM_BALANCE_NEEDED,
+        solAmount,
+        rentExempt: MIN_RENT_EXEMPT
+      });
+      
+      if (walletBalance / 1e9 < MINIMUM_BALANCE_NEEDED) {
+        throw new Error(
+          `Insufficient balance. You need at least ${MINIMUM_BALANCE_NEEDED.toFixed(6)} SOL ` +
+          `(${solAmount} for trade + ${MIN_RENT_EXEMPT.toFixed(6)} for token account creation). ` +
+          `Current balance: ${(walletBalance / 1e9).toFixed(6)} SOL. ` +
+          `Please add more SOL to your wallet.`
+        );
+      }
+      
+      // Use FULL amount for swap (no fee deduction to maximize success)
+      // We'll handle fees differently later or skip them for now
+      const netSolAmount = solAmount;
+      
+      logger.info(`Proceeding with swap using full amount:`, {
         originalAmount: solAmount,
-        feeAmount: actualFee,
         netAmount: netSolAmount
       });
       
-      // Update quote with net amount (after fee) with adaptive slippage
-      const netQuote = await this.executeWithRetry(
-        () => this.getJupiterQuote({
-          inputMint: this.tokenMints.SOL,
-          outputMint: tokenAddress,
-          amount: Math.floor(netSolAmount * 1e9),
-          slippageBps: adaptiveSlippage * 100 // Use adaptive slippage
-        }),
-        'Jupiter Net Quote (Buy)',
-        userId
-      );
-      
-      if (!netQuote) {
-        throw new Error('Unable to get quote from Jupiter for net amount');
-      }
-      
-      // Get swap transaction with net amount with retry
+      // Get swap transaction with FULL amount
       const swapTransaction = await this.executeWithRetry(
-        () => this.getJupiterSwapTransaction(netQuote, wallet.publicKey),
+        () => this.getJupiterSwapTransaction(quote, wallet.publicKey),
         'Jupiter Swap Transaction (Buy)',
         userId
       );
@@ -310,12 +317,6 @@ class JupiterTradingService {
         });
         throw new Error('Unable to get swap transaction from Jupiter. Please try again or increase slippage.');
       }
-
-      // Collect platform fee first
-      const feeCollection = await this.collectPlatformFee(wallet, actualFee);
-      if (!feeCollection.success) {
-        logger.warn('Fee collection failed, proceeding with swap:', feeCollection.error);
-      }
       
       // Execute the swap transaction with retry
       const result = await this.executeWithRetry(
@@ -325,8 +326,8 @@ class JupiterTradingService {
       );
 
       if (result.success) {
-        // Calculate actual tokens received (from net quote)
-        const tokensReceived = parseInt(netQuote.outAmount) / 1e6; // Adjust decimals based on token
+        // Calculate actual tokens received (from original quote)
+        const tokensReceived = parseInt(quote.outAmount) / 1e6; // Adjust decimals based on token
         
         // Get current SOL/USD price for accurate price calculation
         const solPriceUSD = 200; // Fallback, should fetch from price service
@@ -345,13 +346,13 @@ class JupiterTradingService {
         return {
           success: true,
           txHash: result.txHash,
-          feeCollectionTx: feeCollection.signature,
+          feeCollectionTx: null, // No fee collection for now
           tokensReceived: tokensReceived,
           actualPrice: actualPriceUSD, // Price in USD
-          solSpent: netSolAmount, // Net amount actually used for tokens
-          grossSolSpent: solAmount, // Original amount including fees
-          platformFee: actualFee,
-          priceImpact: netQuote.priceImpactPct,
+          solSpent: netSolAmount, // Full amount used for tokens
+          grossSolSpent: solAmount, // Same as net for now
+          platformFee: 0, // No fee collected
+          priceImpact: quote.priceImpactPct,
           timestamp: new Date()
         };
       }
