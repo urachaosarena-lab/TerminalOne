@@ -5,25 +5,56 @@ const logger = require('../utils/logger');
 class SolanaService {
   constructor() {
     this.connection = null;
+    this.fallbackConnections = [];
+    this.currentConnectionIndex = 0;
     this.isInitialized = false;
+    this.failedEndpoints = new Map(); // Track failed endpoints with timestamps
+    this.endpointCooldown = 60000; // 60 seconds cooldown for failed endpoints
   }
 
   async initialize() {
     try {
+      // Initialize primary connection
       this.connection = new Connection(
         config.solana.rpcUrl,
-        config.solana.commitment
+        {
+          commitment: config.solana.commitment,
+          wsEndpoint: config.solana.wsUrl,
+          confirmTransactionInitialTimeout: config.solana.confirmTimeout
+        }
       );
 
-      // Test the connection
+      // Initialize fallback connections
+      this.fallbackConnections = config.solana.fallbackRpcUrls.map(url => 
+        new Connection(url, config.solana.commitment)
+      );
+
+      // Test the primary connection
       const version = await this.connection.getVersion();
-      logger.info(`Connected to Solana cluster: ${config.solana.network}`, version);
+      logger.info(`✅ Connected to Solana RPC: ${config.solana.network}`, version);
+      logger.info(`🔄 Fallback RPCs configured: ${this.fallbackConnections.length} endpoints`);
+      logger.info(`⚡ Using premium RPC endpoint for enhanced reliability`);
       
       this.isInitialized = true;
       return true;
     } catch (error) {
-      logger.error('Failed to initialize Solana connection:', error);
-      throw error;
+      logger.error('❌ Failed to initialize primary Solana connection, trying fallback...', error.message);
+      
+      // Try fallback connections
+      for (let i = 0; i < this.fallbackConnections.length; i++) {
+        try {
+          const version = await this.fallbackConnections[i].getVersion();
+          logger.info(`✅ Connected via fallback RPC #${i + 1}`);
+          this.connection = this.fallbackConnections[i];
+          this.currentConnectionIndex = i;
+          this.isInitialized = true;
+          return true;
+        } catch (fallbackError) {
+          logger.warn(`Fallback RPC #${i + 1} failed:`, fallbackError.message);
+        }
+      }
+      
+      throw new Error('All RPC endpoints failed to connect');
     }
   }
 
@@ -94,6 +125,73 @@ class SolanaService {
       throw new Error('Solana service not initialized');
     }
     return this.connection;
+  }
+
+  /**
+   * Switch to next available RPC endpoint on failure
+   */
+  async switchToFallbackRPC() {
+    if (this.fallbackConnections.length === 0) {
+      logger.warn('⚠️ No fallback RPCs available');
+      return false;
+    }
+
+    // Mark current endpoint as failed
+    const currentUrl = config.solana.rpcUrl;
+    this.failedEndpoints.set(currentUrl, Date.now());
+    logger.warn(`🔴 Marking RPC as failed: ${currentUrl}`);
+
+    // Try next fallback
+    for (let i = 0; i < this.fallbackConnections.length; i++) {
+      const nextIndex = (this.currentConnectionIndex + 1 + i) % this.fallbackConnections.length;
+      const fallbackConnection = this.fallbackConnections[nextIndex];
+      
+      try {
+        // Test the connection
+        await fallbackConnection.getVersion();
+        
+        logger.info(`✅ Switched to fallback RPC #${nextIndex + 1}`);
+        this.connection = fallbackConnection;
+        this.currentConnectionIndex = nextIndex;
+        return true;
+      } catch (error) {
+        logger.warn(`Fallback RPC #${nextIndex + 1} unavailable:`, error.message);
+      }
+    }
+
+    logger.error('❌ All RPC endpoints are unavailable');
+    return false;
+  }
+
+  /**
+   * Execute RPC call with automatic failover
+   */
+  async executeWithFailover(operation, operationName = 'RPC call') {
+    let lastError;
+    const maxAttempts = 1 + this.fallbackConnections.length; // Primary + all fallbacks
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        return await operation(this.connection);
+      } catch (error) {
+        lastError = error;
+        const isRateLimitOrTimeout = 
+          error.message?.includes('429') ||
+          error.message?.includes('timeout') ||
+          error.message?.includes('rate limit');
+
+        if (isRateLimitOrTimeout && attempt < maxAttempts - 1) {
+          logger.warn(`${operationName} failed, switching RPC...`, error.message);
+          await this.switchToFallbackRPC();
+          await new Promise(resolve => setTimeout(resolve, 1000)); // 1s delay before retry
+          continue;
+        }
+        
+        throw error;
+      }
+    }
+
+    throw lastError;
   }
 
   async getAccountInfo(publicKeyString) {

@@ -10,10 +10,18 @@ module.exports = {
   // Solana Configuration
   solana: {
     rpcUrl: process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com',
+    fallbackRpcUrls: process.env.SOLANA_RPC_FALLBACK_URLS?.split(',').map(url => url.trim()) || [
+      'https://api.mainnet-beta.solana.com',
+      'https://solana-api.projectserum.com'
+    ],
+    wsUrl: process.env.SOLANA_WS_URL || null,
+    jitoRpcUrl: process.env.JITO_RPC_URL || 'https://mainnet.block-engine.jup.ag',
+    jitoAuthKeypair: process.env.JITO_AUTH_KEYPAIR || null,
     network: process.env.SOLANA_NETWORK || 'mainnet-beta', // MAINNET for production
     commitment: 'confirmed',
     maxRetries: 3,
     timeout: 30000, // 30 seconds
+    confirmTimeout: 60000, // 60 seconds for transaction confirmation
   },
 
   // Bot Configuration

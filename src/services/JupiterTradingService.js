@@ -596,7 +596,6 @@ class JupiterTradingService {
    * Execute the transaction on Solana with enhanced reliability
    */
   async executeTransaction(wallet, swapTransactionBase64) {
-    const connection = this.solanaService.connection;
     let attempt = 0;
     const maxAttempts = 3;
     
@@ -604,38 +603,51 @@ class JupiterTradingService {
       attempt++;
       
       try {
+        // Use executeWithFailover for RPC calls
+        const connection = await this.solanaService.executeWithFailover(
+          (conn) => Promise.resolve(conn),
+          'Get Connection'
+        );
+        
         const swapTransactionBuffer = Buffer.from(swapTransactionBase64, 'base64');
         
         // Deserialize versioned transaction
         const transaction = VersionedTransaction.deserialize(swapTransactionBuffer);
         
-        // Get fresh blockhash if retrying
-        if (attempt > 1) {
-          logger.info(`Transaction attempt ${attempt}: Getting fresh blockhash`);
-          const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('finalized');
-          transaction.message.recentBlockhash = blockhash;
-        }
+        // ALWAYS get fresh blockhash (critical for reliability)
+        logger.info(`🔄 Transaction attempt ${attempt}: Getting fresh blockhash`);
+        const { blockhash, lastValidBlockHeight } = await this.solanaService.executeWithFailover(
+          (conn) => conn.getLatestBlockhash('finalized'),
+          'Get Latest Blockhash'
+        );
+        transaction.message.recentBlockhash = blockhash;
         
         // Sign the transaction
         const keyPair = wallet.keyPair;
         transaction.sign([keyPair]);
         
-        // Send the transaction with optimized settings
-        logger.info(`Sending transaction (attempt ${attempt}/${maxAttempts})...`);
-        const signature = await connection.sendRawTransaction(transaction.serialize(), {
-          skipPreflight: attempt === 1, // Skip preflight on first try for speed, enable on retries
-          maxRetries: 5, // Increased from 3
-          preflightCommitment: 'processed'
-        });
+        // Send the transaction with optimized settings and failover support
+        logger.info(`🚀 Sending transaction (attempt ${attempt}/${maxAttempts})...`);
+        const signature = await this.solanaService.executeWithFailover(
+          (conn) => conn.sendRawTransaction(transaction.serialize(), {
+            skipPreflight: false, // Always use preflight for safety with premium RPC
+            maxRetries: 5,
+            preflightCommitment: 'confirmed'
+          }),
+          'Send Transaction'
+        );
 
-        logger.info(`Transaction sent: ${signature}`);
+        logger.info(`✅ Transaction sent: ${signature}`);
 
-        // Wait for confirmation with timeout
-        const confirmationPromise = connection.confirmTransaction({
-          signature,
-          blockhash: transaction.message.recentBlockhash,
-          lastValidBlockHeight: await connection.getBlockHeight()
-        }, 'confirmed');
+        // Wait for confirmation with timeout and failover
+        const confirmationPromise = this.solanaService.executeWithFailover(
+          (conn) => conn.confirmTransaction({
+            signature,
+            blockhash,
+            lastValidBlockHeight
+          }, 'confirmed'),
+          'Confirm Transaction'
+        );
         
         // Add 60s timeout for confirmation
         const timeoutPromise = new Promise((_, reject) => 
@@ -777,10 +789,12 @@ class JupiterTradingService {
   async collectPlatformFee(wallet, feeAmount) {
     try {
       const REVENUE_WALLET = 'GgnqWs2X52UTeZMn478A5xkLQMXdKR8G2Qf1RHR8gKz8';
-      const connection = this.solanaService.connection;
       
-      // Check wallet balance first
-      const balance = await connection.getBalance(new PublicKey(wallet.publicKey));
+      // Check wallet balance first with failover
+      const balance = await this.solanaService.executeWithFailover(
+        (conn) => conn.getBalance(new PublicKey(wallet.publicKey)),
+        'Get Balance for Fee'
+      );
       const feeInLamports = Math.floor(feeAmount * 1e9);
       const rentExemption = 5000; // 0.000005 SOL for rent exemption
       
@@ -805,24 +819,33 @@ class JupiterTradingService {
         })
       );
       
-      // Get recent blockhash
-      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+      // Get recent blockhash with failover
+      const { blockhash, lastValidBlockHeight } = await this.solanaService.executeWithFailover(
+        (conn) => conn.getLatestBlockhash('confirmed'),
+        'Get Blockhash for Fee'
+      );
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = new PublicKey(wallet.publicKey);
       
-      // Sign and send the fee transaction
+      // Sign and send the fee transaction with failover
       transaction.sign(wallet.keyPair);
-      const feeSignature = await connection.sendRawTransaction(transaction.serialize(), {
-        skipPreflight: false,
-        maxRetries: 2
-      });
+      const feeSignature = await this.solanaService.executeWithFailover(
+        (conn) => conn.sendRawTransaction(transaction.serialize(), {
+          skipPreflight: false,
+          maxRetries: 3
+        }),
+        'Send Fee Transaction'
+      );
       
-      // Wait for confirmation
-      await connection.confirmTransaction({
-        signature: feeSignature,
-        blockhash,
-        lastValidBlockHeight
-      }, 'confirmed');
+      // Wait for confirmation with failover
+      await this.solanaService.executeWithFailover(
+        (conn) => conn.confirmTransaction({
+          signature: feeSignature,
+          blockhash,
+          lastValidBlockHeight
+        }, 'confirmed'),
+        'Confirm Fee Transaction'
+      );
       
       logger.info(`Platform fee collected:`, {
         amount: feeAmount,
