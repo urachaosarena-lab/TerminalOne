@@ -796,7 +796,8 @@ class JupiterTradingService {
         'Get Balance for Fee'
       );
       const feeInLamports = Math.floor(feeAmount * 1e9);
-      const rentExemption = 5000; // 0.000005 SOL for rent exemption
+      // Rent exemption for account (~0.002 SOL) + transaction fee (~0.000005 SOL) + safety buffer
+      const rentExemption = 2500000; // 0.0025 SOL minimum to keep account rent-exempt
       
       if (balance < feeInLamports + rentExemption) {
         logger.warn(`Insufficient balance for fee collection:`, {
