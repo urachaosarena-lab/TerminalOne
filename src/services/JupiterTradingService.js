@@ -593,49 +593,117 @@ class JupiterTradingService {
   }
 
   /**
-   * Execute the transaction on Solana
+   * Execute the transaction on Solana with enhanced reliability
    */
   async executeTransaction(wallet, swapTransactionBase64) {
-    try {
-      const swapTransactionBuffer = Buffer.from(swapTransactionBase64, 'base64');
+    const connection = this.solanaService.connection;
+    let attempt = 0;
+    const maxAttempts = 3;
+    
+    while (attempt < maxAttempts) {
+      attempt++;
       
-      // Deserialize versioned transaction
-      const transaction = VersionedTransaction.deserialize(swapTransactionBuffer);
-      
-      // Sign the transaction
-      const keyPair = wallet.keyPair;
-      transaction.sign([keyPair]);
-      
-      // Send the transaction
-      const connection = this.solanaService.connection;
-      const signature = await connection.sendRawTransaction(transaction.serialize(), {
-        skipPreflight: false,
-        maxRetries: 3
-      });
+      try {
+        const swapTransactionBuffer = Buffer.from(swapTransactionBase64, 'base64');
+        
+        // Deserialize versioned transaction
+        const transaction = VersionedTransaction.deserialize(swapTransactionBuffer);
+        
+        // Get fresh blockhash if retrying
+        if (attempt > 1) {
+          logger.info(`Transaction attempt ${attempt}: Getting fresh blockhash`);
+          const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('finalized');
+          transaction.message.recentBlockhash = blockhash;
+        }
+        
+        // Sign the transaction
+        const keyPair = wallet.keyPair;
+        transaction.sign([keyPair]);
+        
+        // Send the transaction with optimized settings
+        logger.info(`Sending transaction (attempt ${attempt}/${maxAttempts})...`);
+        const signature = await connection.sendRawTransaction(transaction.serialize(), {
+          skipPreflight: attempt === 1, // Skip preflight on first try for speed, enable on retries
+          maxRetries: 5, // Increased from 3
+          preflightCommitment: 'processed'
+        });
 
-      logger.info('Transaction sent:', signature);
+        logger.info(`Transaction sent: ${signature}`);
 
-      // Wait for confirmation
-      const confirmation = await connection.confirmTransaction(signature, 'confirmed');
-      
-      if (confirmation.value.err) {
-        throw new Error(`Transaction failed: ${JSON.stringify(confirmation.value.err)}`);
+        // Wait for confirmation with timeout
+        const confirmationPromise = connection.confirmTransaction({
+          signature,
+          blockhash: transaction.message.recentBlockhash,
+          lastValidBlockHeight: await connection.getBlockHeight()
+        }, 'confirmed');
+        
+        // Add 60s timeout for confirmation
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Transaction confirmation timeout')), 60000)
+        );
+        
+        const confirmation = await Promise.race([confirmationPromise, timeoutPromise]);
+        
+        if (confirmation.value && confirmation.value.err) {
+          const errorStr = JSON.stringify(confirmation.value.err);
+          logger.error(`Transaction failed on-chain: ${errorStr}`);
+          
+          // Don't retry on these specific errors
+          if (errorStr.includes('InsufficientFunds') || 
+              errorStr.includes('AccountNotFound')) {
+            return {
+              success: false,
+              error: `Transaction failed: ${errorStr}`
+            };
+          }
+          
+          // Retry on other errors
+          if (attempt < maxAttempts) {
+            logger.warn(`Retrying transaction after error...`);
+            await this.sleep(2000 * attempt); // Increasing delay
+            continue;
+          }
+          
+          throw new Error(`Transaction failed: ${errorStr}`);
+        }
+
+        logger.info(`Transaction confirmed: ${signature}`);
+
+        return {
+          success: true,
+          txHash: signature
+        };
+
+      } catch (error) {
+        logger.error(`Transaction execution failed (attempt ${attempt}/${maxAttempts}):`, error.message);
+        
+        // Check if we should retry
+        const shouldRetry = 
+          attempt < maxAttempts &&
+          !error.message.includes('InsufficientFunds') &&
+          !error.message.includes('AccountNotFound') &&
+          (error.message.includes('timeout') ||
+           error.message.includes('block height exceeded') ||
+           error.message.includes('blockhash not found') ||
+           error.message.includes('429'));
+        
+        if (shouldRetry) {
+          logger.info(`Waiting before retry attempt ${attempt + 1}...`);
+          await this.sleep(3000 * attempt); // Increasing delay: 3s, 6s, 9s
+          continue;
+        }
+        
+        return {
+          success: false,
+          error: error.message
+        };
       }
-
-      logger.info('Transaction confirmed:', signature);
-
-      return {
-        success: true,
-        txHash: signature
-      };
-
-    } catch (error) {
-      logger.error('Transaction execution failed:', error.message);
-      return {
-        success: false,
-        error: error.message
-      };
     }
+    
+    return {
+      success: false,
+      error: `Transaction failed after ${maxAttempts} attempts`
+    };
   }
 
   /**
@@ -708,7 +776,7 @@ class JupiterTradingService {
    */
   async collectPlatformFee(wallet, feeAmount) {
     try {
-      const REVENUE_WALLET = 'BgvbtjrHc1ciRmrPkRBHG3cqcxh14qussJaFtTG1XArK';
+      const REVENUE_WALLET = 'GgnqWs2X52UTeZMn478A5xkLQMXdKR8G2Qf1RHR8gKz8';
       const connection = this.solanaService.connection;
       
       // Check wallet balance first

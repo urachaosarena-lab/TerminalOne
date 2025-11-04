@@ -6,7 +6,7 @@ class RevenueService {
     this.solanaService = solanaService;
     
     // Revenue collection wallet
-    this.REVENUE_WALLET = 'BgvbtjrHc1ciRmrPkRBHG3cqcxh14qussJaFtTG1XArK'; // TerminalOne Revenue Wallet
+    this.REVENUE_WALLET = 'GgnqWs2X52UTeZMn478A5xkLQMXdKR8G2Qf1RHR8gKz8'; // TerminalOne Revenue Wallet
     
     // Fee configuration
     this.TRANSACTION_FEE_PERCENTAGE = 0.01; // 1% fee
