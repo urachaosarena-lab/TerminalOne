@@ -235,26 +235,208 @@ ${getBotTitle()}
 }
 
 /**
- * Handle token address input and launch grid
+ * Handle token analysis and display results
  */
 async function handleTokenAnalysis(ctx) {
+  const tokenInput = ctx.message.text.trim();
   const userId = ctx.from.id;
-  const tokenAddress = ctx.message.text.trim();
+  const tokenAnalysisService = ctx.services?.tokenAnalysis;
   
-  if (!ctx.session.awaitingGridToken) return;
+  if (!ctx.session?.awaitingGridToken) return;
   
-  delete ctx.session.awaitingGridToken;
-  
-  // Validate token address
-  if (!tokenAddress.match(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/)) {
-    await ctx.reply('❌ Invalid Solana token address. Please try again or /grid to start over.');
+  // Input validation
+  if (!tokenInput || tokenInput.length > 50) {
+    await ctx.deleteMessage();
+    await ctx.reply('❌ Invalid token input. Please enter a valid token symbol or address.');
     return;
   }
   
-  await ctx.reply('🔄 Launching grid trading strategy...\n\nThis may take a moment.');
+  // Check for malicious patterns
+  const maliciousPatterns = ['<', '>', 'script', 'javascript', 'data:', 'vbscript'];
+  if (maliciousPatterns.some(pattern => tokenInput.toLowerCase().includes(pattern))) {
+    await ctx.deleteMessage();
+    await ctx.reply('❌ Invalid characters detected. Please enter only token symbols or addresses.');
+    return;
+  }
+  
+  // Basic format validation for Solana addresses
+  if (tokenInput.length > 10 && !/^[1-9A-HJ-NP-Za-km-z]{32,50}$/.test(tokenInput)) {
+    await ctx.deleteMessage();
+    await ctx.reply('❌ Invalid address format. Please enter a valid Solana token address.');
+    return;
+  }
+
+  try {
+    // Delete user message
+    await ctx.deleteMessage();
+
+    // Show analysis in progress
+    const processingMsg = await ctx.reply(
+      `${getBotTitle()}\n\n🔍 **Analyzing token...**\n\n⏳ Fetching market data, please wait...`,
+      { parse_mode: 'Markdown' }
+    );
+
+    // Perform token analysis
+    const analysis = await tokenAnalysisService.analyzeToken(tokenInput);
+    const formatted = tokenAnalysisService.formatAnalysisForDisplay(analysis);
+
+    // Get user configuration
+    const config = ctx.services.grid.getUserConfig(userId);
+
+    const analysisMessage = `
+${getBotTitle()}
+
+${formatted.header}
+
+${formatted.price}
+${formatted.changes}
+${formatted.volume}
+
+🕸️ **Your Grid Setup:**
+💰 Initial: ${config.initialAmount} SOL | 📉 Buys: ${config.numBuys} | 📈 Sells: ${config.numSells}
+📊 Drop: ${config.dropPercent}% | 🚀 Leap: ${config.leapPercent}%
+📈 Max Coverage: ±${Math.max(config.dropPercent * config.numBuys, config.leapPercent * config.numSells).toFixed(1)}%
+
+🚀 **Ready to launch?**
+    `.trim();
+
+    // Store analysis for launch
+    ctx.session.gridTokenAnalysis = analysis;
+    ctx.session.awaitingGridToken = false;
+
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🚀 Launch Grid', 'grid_confirm_launch')],
+      [Markup.button.callback('⚙️ Adjust Config', 'grid_configure')],
+      [Markup.button.callback('🔍 Analyze Another', 'grid_launch')],
+      [Markup.button.callback('🔙 Back', 'grid_menu')]
+    ]);
+
+    // Update the processing message
+    await ctx.telegram.editMessageText(
+      ctx.chat.id,
+      processingMsg.message_id,
+      undefined,
+      analysisMessage,
+      {
+        parse_mode: 'Markdown',
+        ...keyboard
+      }
+    );
+
+  } catch (error) {
+    logger.error(`Grid token analysis error for ${tokenInput}:`, error);
+    
+    let errorMessage = `${getBotTitle()}\n\n❌ **Token Analysis Failed**\n\n`;
+    let suggestions = [];
+    
+    if (error.message.includes('not found')) {
+      errorMessage += `🔍 **Token not found:** \`${tokenInput}\`\n\n`;
+      suggestions = [
+        '✅ Use the full contract address (43-44 characters)',
+        '🔄 Double-check the token ticker spelling',
+        '🌐 Try popular tokens like SOL, BONK, USDC'
+      ];
+    } else if (error.message.includes('timeout') || error.message.includes('ENOTFOUND')) {
+      errorMessage += `🌐 **Network Connection Issues**\n\n`;
+      suggestions = [
+        '🔄 Network is slow - please try again in a moment',
+        '📊 APIs may be temporarily unavailable',
+        '⚡ Use a contract address for faster results'
+      ];
+    } else {
+      errorMessage += `⚠️ **Technical Error**\n\n${error.message}\n\n`;
+      suggestions = [
+        '🔄 Try again with a different token',
+        '📜 Use the token\'s contract address instead',
+        '📧 Contact support if this persists'
+      ];
+    }
+    
+    errorMessage += `💡 **Try these:**\n${suggestions.join('\n')}`;
+    
+    await ctx.reply(errorMessage, {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback('🔍 Try Again', 'grid_launch')],
+        [Markup.button.callback('🔙 Back', 'grid_menu')]
+      ])
+    });
+  }
+}
+
+/**
+ * Confirm and launch grid
+ */
+async function handleConfirmLaunch(ctx) {
+  const userId = ctx.from.id;
+  const gridService = ctx.services?.grid;
+  const analysis = ctx.session?.gridTokenAnalysis;
+
+  if (!analysis) {
+    await ctx.answerCbQuery('❌ No token analysis found. Please analyze a token first.');
+    return;
+  }
+
+  try {
+    const config = gridService.getUserConfig(userId);
+    
+    // Show launch confirmation
+    const confirmMessage = `
+${getBotTitle()}
+
+🚀 **Launch Confirmation**
+
+🎯 **Token:** ${analysis.symbol} (${analysis.name})
+💰 **Initial Amount:** ${config.initialAmount} SOL
+📊 **Strategy Score:** ${analysis.suitabilityScore}/100
+
+⚠️ **Grid Setup:**
+• Initial Buy: **${(config.initialAmount / 2).toFixed(3)} SOL**
+• Buy Orders: **${config.numBuys}** (↓${(config.dropPercent * config.numBuys).toFixed(1)}%)
+• Sell Orders: **${config.numSells}** (↑${(config.leapPercent * config.numSells).toFixed(1)}%)
+• Risk Level: **${analysis.riskLevel}**
+
+🔥 **This will execute the first buy immediately!**
+
+Are you ready to launch?
+    `.trim();
+
+    await ctx.editMessageText(confirmMessage, {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback('✅ Launch Now!', 'grid_execute_launch')],
+        [Markup.button.url('📊 View on DEXScreener', `https://dexscreener.com/solana/${analysis.tokenAddress}`)],
+        [Markup.button.callback('❌ Cancel', 'grid_menu')]
+      ])
+    });
+
+  } catch (error) {
+    await ctx.answerCbQuery('❌ Error preparing launch. Please try again.');
+    logger.error('Grid launch preparation error:', error);
+  }
+}
+
+/**
+ * Execute grid launch
+ */
+async function handleExecuteLaunch(ctx) {
+  const userId = ctx.from.id;
+  const analysis = ctx.session?.gridTokenAnalysis;
+  
+  if (!analysis) {
+    await ctx.answerCbQuery('❌ No token found. Please start over.');
+    return;
+  }
+  
+  await ctx.answerCbQuery('🚀 Launching grid...');
   
   try {
-    const result = await ctx.services.grid.launchGrid(userId, tokenAddress);
+    const loadingMsg = await ctx.editMessageText(
+      `${getBotTitle()}\n\n🚀 **Launching Grid Trading...**\n\n⏳ Executing initial buy and setting up grid levels...`,
+      { parse_mode: 'Markdown' }
+    );
+    
+    const result = await ctx.services.grid.launchGrid(userId, analysis.tokenAddress);
     
     if (result.success) {
       const message = `
@@ -262,35 +444,54 @@ ${getBotTitle()}
 
 ✅ **GRID LAUNCHED SUCCESSFULLY!**
 
-**Grid ID:** \`${result.gridId.slice(0, 16)}...\`
-**Token:** \`${tokenAddress.slice(0, 8)}...${tokenAddress.slice(-8)}\`
+**Token:** ${analysis.symbol}
+**Grid ID:** \`${result.gridId.slice(5, 18)}\`
 **Entry Price:** $${result.entryPrice.toFixed(8)}
 **Initial Tokens:** ${result.tokensReceived.toLocaleString()}
 
 **Grid Setup:**
-📉 ${result.buyGrids} buy orders set below entry
-📈 ${result.sellGrids} sell orders set above entry
+📉 ${result.buyGrids} buy orders below entry
+📈 ${result.sellGrids} sell orders above entry
 
-🤖 Bot is now monitoring prices every 30 seconds and will execute trades automatically when price hits grid levels.
+🤖 Bot monitoring every 30s and executing trades automatically.
 
-Use /grid to view active grids and performance.
+View **📊 Active Grids** to track performance!
       `.trim();
       
-      await ctx.reply(message, {
+      await ctx.editMessageText(message, {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
           [Markup.button.callback('📊 View Grid', `grid_view_${result.gridId}`)],
-          [Markup.button.callback('🔙 Main Menu', 'back_to_main')]
+          [Markup.button.callback('🕸️ Launch Another', 'grid_launch')],
+          [Markup.button.callback('🏠 Main Menu', 'back_to_main')]
         ])
       });
+      
+      // Clear session
+      delete ctx.session.gridTokenAnalysis;
     } else {
-      await ctx.reply(`❌ **Grid launch failed:**\n\n${result.error}\n\nPlease check your balance and try again.`, {
-        parse_mode: 'Markdown'
-      });
+      await ctx.editMessageText(
+        `${getBotTitle()}\n\n❌ **Grid Launch Failed**\n\n${result.error}\n\nPlease check your balance and try again.`,
+        {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback('🔄 Try Again', 'grid_launch')],
+            [Markup.button.callback('🔙 Back', 'grid_menu')]
+          ])
+        }
+      );
     }
   } catch (error) {
-    logger.error('Grid launch error:', error);
-    await ctx.reply('❌ Error launching grid. Please try again later.');
+    logger.error('Grid execute launch error:', error);
+    await ctx.editMessageText(
+      `${getBotTitle()}\n\n❌ **Error:**\n\n${error.message}`,
+      {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback('🔙 Back', 'grid_menu')]
+        ])
+      }
+    );
   }
 }
 
@@ -485,6 +686,8 @@ module.exports = {
   handleResetConfig,
   handleLaunchMenu,
   handleTokenAnalysis,
+  handleConfirmLaunch,
+  handleExecuteLaunch,
   handleActiveGrids,
   handleViewGrid,
   handleStopGrid

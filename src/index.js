@@ -254,6 +254,8 @@ class TerminalOneBot {
     this.bot.action('grid_menu', gridHandlers.handleGridMenu);
     this.bot.action('grid_configure', gridHandlers.handleConfigurationMenu);
     this.bot.action('grid_launch', gridHandlers.handleLaunchMenu);
+    this.bot.action('grid_confirm_launch', gridHandlers.handleConfirmLaunch);
+    this.bot.action('grid_execute_launch', gridHandlers.handleExecuteLaunch);
     this.bot.action('grid_active', gridHandlers.handleActiveGrids);
     this.bot.action(/grid_view_(.+)/, gridHandlers.handleViewGrid);
     this.bot.action(/grid_stop_(.+)/, gridHandlers.handleStopGrid);
