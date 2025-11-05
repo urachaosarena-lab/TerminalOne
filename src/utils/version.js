@@ -29,9 +29,9 @@ function getVersion() {
 function getBotTitle(context = '') {
   const version = getVersion();
   if (context) {
-    return `🦈TerminalOne | v${version} | Grid Trading - ${context}`;
+    return `🦈TerminalOne | v${version} | 🕸️Grid Testing UPDATE! - ${context}`;
   }
-  return `🦈TerminalOne | v${version} | Grid Trading`;
+  return `🦈TerminalOne | v${version} | 🕸️Grid Testing UPDATE!`;
 }
 
 module.exports = { getVersion, getBotTitle };

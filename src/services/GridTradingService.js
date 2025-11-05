@@ -137,6 +137,7 @@ class GridTradingService {
         })),
         totalInvested: initialBuyAmount,
         totalRealized: 0,
+        cumulativeSellPnL: 0, // Track cumulative P&L from sells only
         filledOrders: [],
         createdAt: new Date(),
         lastCheck: new Date()
@@ -353,14 +354,22 @@ class GridTradingService {
         sellGrid.fillPrice = currentPrice;
         sellGrid.solReceived = sellResult.solReceived;
         
+        // Calculate cost basis for tokens being sold (average cost)
+        const avgCostPerToken = gridState.totalInvested / (gridState.tokensHeld + sellGrid.amount);
+        const costOfTokensSold = avgCostPerToken * sellGrid.amount;
+        const sellProfit = sellResult.solReceived - costOfTokensSold;
+        
         gridState.tokensHeld -= sellGrid.amount;
         gridState.totalRealized += sellResult.solReceived;
+        gridState.cumulativeSellPnL += sellProfit; // Add to cumulative P&L
+        
         gridState.filledOrders.push({
           type: 'sell',
           gridPrice: sellGrid.price,
           fillPrice: currentPrice,
           amount: sellGrid.amount,
           solReceived: sellResult.solReceived,
+          profit: sellProfit, // Track individual sell profit
           timestamp: new Date(),
           txHash: sellResult.txHash
         });
@@ -468,15 +477,20 @@ class GridTradingService {
       const priceData = await this.priceService.getTokenPrice(gridState.tokenAddress);
       const currentPrice = priceData?.price || gridState.entryPrice;
       
+      // Count filled sells
+      const filledSells = gridState.sellGrids.filter(g => g.filled).length;
+      
+      // P&L calculation:
+      // - Show 0 until first sell is triggered
+      // - After first sell, show cumulative P&L from all sells
+      const totalPnL = filledSells > 0 ? gridState.cumulativeSellPnL : 0;
+      const pnlPercent = filledSells > 0 ? (gridState.cumulativeSellPnL / gridState.initialAmount) * 100 : 0;
+      
       // Unrealized value of held tokens at current price
       const unrealizedValue = gridState.tokensHeld * currentPrice;
       
       // Current total value (realized SOL + unrealized token value)
       const currentTotalValue = gridState.totalRealized + unrealizedValue;
-      
-      // Total P&L = Current Value - Initial Investment
-      const totalPnL = currentTotalValue - gridState.initialAmount;
-      const pnlPercent = (totalPnL / gridState.initialAmount) * 100;
       
       return {
         totalInvested: gridState.totalInvested,
@@ -485,10 +499,10 @@ class GridTradingService {
         currentPrice,
         currentTotalValue, // Total portfolio value (realized + unrealized)
         unrealizedValue, // Value of tokens held
-        totalPnL,
-        pnlPercent,
+        totalPnL, // Cumulative P&L from sells only (0 until first sell)
+        pnlPercent, // P&L as percentage of initial investment
         filledBuys: gridState.buyGrids.filter(g => g.filled).length,
-        filledSells: gridState.sellGrids.filter(g => g.filled).length,
+        filledSells,
         totalOrders: gridState.filledOrders.length
       };
     } catch (error) {
