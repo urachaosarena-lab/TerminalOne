@@ -468,15 +468,14 @@ class GridTradingService {
       const priceData = await this.priceService.getTokenPrice(gridState.tokenAddress);
       const currentPrice = priceData?.price || gridState.entryPrice;
       
-      // Realized P&L from sold tokens
-      const realizedPnL = gridState.totalRealized;
-      
-      // Unrealized P&L from held tokens
+      // Unrealized value of held tokens at current price
       const unrealizedValue = gridState.tokensHeld * currentPrice;
-      const unrealizedPnL = unrealizedValue - (gridState.totalInvested - gridState.totalRealized);
       
-      // Total P&L
-      const totalPnL = realizedPnL + unrealizedPnL - gridState.initialAmount;
+      // Current total value (realized SOL + unrealized token value)
+      const currentTotalValue = gridState.totalRealized + unrealizedValue;
+      
+      // Total P&L = Current Value - Initial Investment
+      const totalPnL = currentTotalValue - gridState.initialAmount;
       const pnlPercent = (totalPnL / gridState.initialAmount) * 100;
       
       return {
@@ -484,9 +483,8 @@ class GridTradingService {
         totalRealized: gridState.totalRealized,
         tokensHeld: gridState.tokensHeld,
         currentPrice,
-        unrealizedValue,
-        realizedPnL,
-        unrealizedPnL,
+        currentTotalValue, // Total portfolio value (realized + unrealized)
+        unrealizedValue, // Value of tokens held
         totalPnL,
         pnlPercent,
         filledBuys: gridState.buyGrids.filter(g => g.filled).length,

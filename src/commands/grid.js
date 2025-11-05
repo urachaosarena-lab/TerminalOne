@@ -589,7 +589,7 @@ ${pnlColor} **P&L:** ${pnl.totalPnL >= 0 ? '+' : ''}${pnl.totalPnL.toFixed(4)} S
 💰 Invested: ${pnl.totalInvested.toFixed(4)} SOL
 💵 Realized: ${pnl.totalRealized.toFixed(4)} SOL
 🪙 Tokens Held: ${pnl.tokensHeld.toLocaleString()}
-💲 Value: ${pnl.unrealizedValue.toFixed(4)} SOL
+💲 Value: ${pnl.currentTotalValue.toFixed(4)} SOL
 
 **Trading:**
 📉 Filled Buys: ${pnl.filledBuys}/${gridState.buyGrids.length}
