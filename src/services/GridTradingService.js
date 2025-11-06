@@ -1,4 +1,6 @@
 const logger = require('../utils/logger');
+const fs = require('fs');
+const path = require('path');
 
 class GridTradingService {
   constructor(jupiterTradingService, enhancedPriceService, walletService) {
@@ -11,6 +13,9 @@ class GridTradingService {
     
     // Grid monitoring intervals
     this.monitoringIntervals = new Map();
+    
+    // Storage path for grid persistence
+    this.gridStoragePath = path.join(__dirname, '../../data/grid_strategies.json');
     
     // Default configuration
     this.defaultConfig = {
@@ -29,12 +34,111 @@ class GridTradingService {
       dropPercent: { min: 0.2, max: 33 },
       leapPercent: { min: 0.2, max: 100 }
     };
+    
+    // Ensure data directory exists
+    const dataDir = path.dirname(this.gridStoragePath);
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    
+    // Load existing grids from file
+    this.loadGridsFromFile();
+  }
+  
+  /**
+   * Load grids from persistent storage
+   */
+  loadGridsFromFile() {
+    try {
+      if (fs.existsSync(this.gridStoragePath)) {
+        const data = fs.readFileSync(this.gridStoragePath, 'utf8');
+        const gridsData = JSON.parse(data);
+        
+        // Restore grids to memory
+        let activeGridCount = 0;
+        Object.entries(gridsData).forEach(([userId, userData]) => {
+          const userGrids = new Map();
+          
+          // Convert dates back from strings
+          Object.entries(userData.grids).forEach(([gridId, gridState]) => {
+            gridState.createdAt = new Date(gridState.createdAt);
+            gridState.lastCheck = new Date(gridState.lastCheck);
+            if (gridState.stoppedAt) {
+              gridState.stoppedAt = new Date(gridState.stoppedAt);
+            }
+            
+            // Convert filled orders timestamps
+            gridState.filledOrders = gridState.filledOrders.map(order => ({
+              ...order,
+              timestamp: new Date(order.timestamp)
+            }));
+            
+            userGrids.set(gridId, gridState);
+            
+            // Resume monitoring for active grids
+            if (gridState.status === 'active') {
+              this.startMonitoring(userId, gridId);
+              activeGridCount++;
+            }
+          });
+          
+          this.activeGrids.set(userId, {
+            config: userData.config,
+            grids: userGrids
+          });
+        });
+        
+        logger.info(`Loaded ${Object.keys(gridsData).length} user grid data, resumed ${activeGridCount} active grids`);
+      } else {
+        logger.info('No existing grid data found, starting fresh');
+      }
+    } catch (error) {
+      logger.error('Failed to load grids from file:', error);
+    }
+  }
+  
+  /**
+   * Save grids to persistent storage
+   */
+  saveGridsToFile() {
+    try {
+      // Convert Map to object for JSON storage
+      const gridsObject = {};
+      this.activeGrids.forEach((userData, userId) => {
+        // Convert userId to string for consistent JSON keys
+        const userIdStr = String(userId);
+        
+        const gridsMap = {};
+        userData.grids.forEach((gridState, gridId) => {
+          gridsMap[gridId] = gridState;
+        });
+        
+        gridsObject[userIdStr] = {
+          config: userData.config,
+          grids: gridsMap
+        };
+      });
+      
+      // Write to file with proper formatting
+      fs.writeFileSync(
+        this.gridStoragePath,
+        JSON.stringify(gridsObject, null, 2),
+        'utf8'
+      );
+      
+      logger.debug(`Saved grid data for ${Object.keys(gridsObject).length} users`);
+    } catch (error) {
+      logger.error('Failed to save grids to file:', error);
+    }
   }
 
   /**
    * Get user's grid configuration or default
    */
   getUserConfig(userId) {
+    // Ensure userId is string for consistency
+    userId = String(userId);
+    
     if (!this.activeGrids.has(userId)) {
       this.activeGrids.set(userId, {
         config: { ...this.defaultConfig },
@@ -48,6 +152,9 @@ class GridTradingService {
    * Update user's grid configuration
    */
   updateConfig(userId, configKey, value) {
+    // Ensure userId is string for consistency
+    userId = String(userId);
+    
     const config = this.getUserConfig(userId);
     
     // Validate against limits
@@ -62,6 +169,7 @@ class GridTradingService {
     }
     
     config[configKey] = value;
+    this.saveGridsToFile(); // Persist config changes
     return { success: true, config };
   }
 
@@ -69,6 +177,9 @@ class GridTradingService {
    * Launch a new grid trading strategy
    */
   async launchGrid(userId, tokenAddress) {
+    // Ensure userId is string for consistency
+    userId = String(userId);
+    
     try {
       const config = this.getUserConfig(userId);
       const walletData = this.walletService.getUserWallet(userId);
@@ -149,6 +260,9 @@ class GridTradingService {
       }
       this.activeGrids.get(userId).grids.set(gridId, gridState);
       
+      // Persist to file
+      this.saveGridsToFile();
+      
       // Start monitoring
       this.startMonitoring(userId, gridId);
       
@@ -224,6 +338,9 @@ class GridTradingService {
    * Check grid and execute orders if price crosses levels
    */
   async checkGrid(userId, gridId) {
+    // Ensure userId is string for consistency
+    userId = String(userId);
+    
     const userGrids = this.activeGrids.get(userId);
     if (!userGrids) return;
     
@@ -318,6 +435,9 @@ class GridTradingService {
         if (availableSellGrid) {
           availableSellGrid.filled = false; // Make it available
         }
+        
+        // Persist grid state changes
+        this.saveGridsToFile();
       }
       
     } catch (error) {
@@ -388,6 +508,9 @@ class GridTradingService {
         if (availableBuyGrid) {
           availableBuyGrid.filled = false; // Make it available
         }
+        
+        // Persist grid state changes
+        this.saveGridsToFile();
       }
       
     } catch (error) {
@@ -403,6 +526,9 @@ class GridTradingService {
    * Stop a grid
    */
   async stopGrid(userId, gridId) {
+    // Ensure userId is string for consistency
+    userId = String(userId);
+    
     const userGrids = this.activeGrids.get(userId);
     if (!userGrids) {
       return { success: false, error: 'No grids found' };
@@ -422,6 +548,9 @@ class GridTradingService {
     
     gridState.status = 'stopped';
     gridState.stoppedAt = new Date();
+    
+    // Persist grid state changes
+    this.saveGridsToFile();
     
     // Calculate final P&L
     const currentValue = gridState.totalRealized;
@@ -448,6 +577,9 @@ class GridTradingService {
    * Get active grids for a user
    */
   getUserActiveGrids(userId) {
+    // Ensure userId is string for consistency
+    userId = String(userId);
+    
     const userGrids = this.activeGrids.get(userId);
     if (!userGrids) return [];
     
@@ -459,6 +591,9 @@ class GridTradingService {
    * Get grid details
    */
   getGridDetails(userId, gridId) {
+    // Ensure userId is string for consistency
+    userId = String(userId);
+    
     const userGrids = this.activeGrids.get(userId);
     if (!userGrids) return null;
     
@@ -469,6 +604,9 @@ class GridTradingService {
    * Calculate current P&L for a grid
    */
   async calculateGridPnL(userId, gridId) {
+    // Ensure userId is string for consistency
+    userId = String(userId);
+    
     const gridState = this.getGridDetails(userId, gridId);
     if (!gridState) return null;
     
