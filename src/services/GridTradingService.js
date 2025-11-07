@@ -627,9 +627,13 @@ class GridTradingService {
     if (!gridState) return null;
     
     try {
-      // Get current price
+      // Get current token price in USD
       const priceData = await this.priceService.getTokenPrice(gridState.tokenAddress);
-      const currentPrice = priceData?.price || gridState.entryPrice;
+      const currentPriceUSD = priceData?.price || gridState.entryPrice;
+      
+      // Get current SOL price in USD to convert token value to SOL
+      const solPriceData = await this.priceService.getTokenPrice('SOL');
+      const solPriceUSD = solPriceData?.price || 200;
       
       // Count filled sells
       const filledSells = gridState.sellGrids.filter(g => g.filled).length;
@@ -640,19 +644,24 @@ class GridTradingService {
       const totalPnL = filledSells > 0 ? gridState.cumulativeSellPnL : 0;
       const pnlPercent = filledSells > 0 ? (gridState.cumulativeSellPnL / gridState.initialAmount) * 100 : 0;
       
-      // Unrealized value of held tokens at current price
-      const unrealizedValue = gridState.tokensHeld * currentPrice;
+      // Unrealized value of held tokens
+      const unrealizedValueUSD = gridState.tokensHeld * currentPriceUSD; // Token value in USD
+      const unrealizedValueSOL = unrealizedValueUSD / solPriceUSD; // Convert to SOL
       
-      // Current total value (realized SOL + unrealized token value)
-      const currentTotalValue = gridState.totalRealized + unrealizedValue;
+      // Current total value (realized SOL + unrealized token value in SOL)
+      const currentTotalValueSOL = gridState.totalRealized + unrealizedValueSOL;
+      const currentTotalValueUSD = currentTotalValueSOL * solPriceUSD;
       
       return {
         totalInvested: gridState.totalInvested,
         totalRealized: gridState.totalRealized,
         tokensHeld: gridState.tokensHeld,
-        currentPrice,
-        currentTotalValue, // Total portfolio value (realized + unrealized)
-        unrealizedValue, // Value of tokens held
+        currentPriceUSD, // Token price in USD
+        solPriceUSD, // SOL price in USD
+        currentTotalValueSOL, // Total portfolio value in SOL (realized + unrealized)
+        currentTotalValueUSD, // Total portfolio value in USD
+        unrealizedValueSOL, // Value of tokens held in SOL
+        unrealizedValueUSD, // Value of tokens held in USD
         totalPnL, // Cumulative P&L from sells only (0 until first sell)
         pnlPercent, // P&L as percentage of initial investment
         filledBuys: gridState.buyGrids.filter(g => g.filled).length,

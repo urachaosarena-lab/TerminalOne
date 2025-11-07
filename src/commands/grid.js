@@ -439,26 +439,29 @@ async function handleExecuteLaunch(ctx) {
     const result = await ctx.services.grid.launchGrid(userId, analysis.tokenAddress);
     
     if (result.success) {
-      // Format token amount
-      const tokenMetadataService = ctx.services?.tokenMetadata;
-      let formattedTokens = result.tokensReceived.toLocaleString();
-      if (tokenMetadataService && result.tokenMetadata) {
-        formattedTokens = tokenMetadataService.formatTokenDisplay(
-          result.tokensReceived,
-          0, // Already in human-readable format
-          result.tokenMetadata.symbol || analysis.symbol
-        );
+      // Format token amount - tokensReceived is already in human-readable format
+      let formattedTokens;
+      if (result.tokensReceived < 0.0001) {
+        formattedTokens = result.tokensReceived.toFixed(8);
+      } else if (result.tokensReceived < 0.01) {
+        formattedTokens = result.tokensReceived.toFixed(6);
+      } else if (result.tokensReceived < 1) {
+        formattedTokens = result.tokensReceived.toFixed(4);
+      } else {
+        formattedTokens = result.tokensReceived.toFixed(2);
       }
+      
+      const tokenSymbol = result.tokenMetadata?.symbol || analysis.symbol;
       
       const message = `
 ${getBotTitle()}
 
 ✅ **GRID LAUNCHED SUCCESSFULLY!**
 
-**Token:** ${analysis.symbol} (${analysis.name || 'Unknown'})
+**Token:** ${tokenSymbol} (${analysis.name || result.tokenMetadata?.name || 'Unknown'})
 **Grid ID:** \`${result.gridId.slice(5, 18)}\`
 **Entry Price:** $${result.entryPrice.toFixed(8)}
-**Initial Tokens:** ${formattedTokens}
+**Initial Tokens:** ${formattedTokens} ${tokenSymbol}
 
 **Grid Setup:**
 📉 ${result.buyGrids} buy orders below entry
@@ -584,19 +587,21 @@ async function handleViewGrid(ctx) {
   
   const runtime = Math.floor((new Date() - gridState.createdAt) / 1000 / 60);
   
-  // Format token amount with correct decimals
-  const tokenMetadataService = ctx.services?.tokenMetadata;
-  let formattedTokenAmount = pnl.tokensHeld.toLocaleString();
-  if (tokenMetadataService && gridState.tokenDecimals) {
-    formattedTokenAmount = tokenMetadataService.formatTokenDisplay(
-      pnl.tokensHeld, 
-      0, // Already in human-readable format from P&L calculation
-      gridState.tokenSymbol || ''
-    );
-  }
-  
   const tokenName = gridState.tokenName || 'Unknown Token';
   const tokenSymbol = gridState.tokenSymbol || 'UNKNOWN';
+  
+  // Format token amount - tokensHeld is already in human-readable format
+  // Just format with appropriate decimals
+  let formattedTokenAmount;
+  if (pnl.tokensHeld < 0.0001) {
+    formattedTokenAmount = pnl.tokensHeld.toFixed(8);
+  } else if (pnl.tokensHeld < 0.01) {
+    formattedTokenAmount = pnl.tokensHeld.toFixed(6);
+  } else if (pnl.tokensHeld < 1) {
+    formattedTokenAmount = pnl.tokensHeld.toFixed(4);
+  } else {
+    formattedTokenAmount = pnl.tokensHeld.toFixed(2);
+  }
   
   const message = `
 ${getBotTitle()}
@@ -614,8 +619,8 @@ ${pnlColor} **P&L:** ${pnl.totalPnL >= 0 ? '+' : ''}${pnl.totalPnL.toFixed(4)} S
 **Position:**
 💰 Invested: ${pnl.totalInvested.toFixed(4)} SOL
 💵 Realized: ${pnl.totalRealized.toFixed(4)} SOL
-🪙 Tokens Held: ${formattedTokenAmount}
-💲 Value: ${pnl.currentTotalValue.toFixed(4)} SOL
+🪙 Tokens Held: ${formattedTokenAmount} ${tokenSymbol}
+💲 Value: ${pnl.currentTotalValueSOL.toFixed(4)} SOL ($${pnl.currentTotalValueUSD.toFixed(2)})
 
 **Trading:**
 📉 Filled Buys: ${pnl.filledBuys}/${gridState.buyGrids.length}
@@ -624,8 +629,8 @@ ${pnlColor} **P&L:** ${pnl.totalPnL >= 0 ? '+' : ''}${pnl.totalPnL.toFixed(4)} S
 
 **Price:**
 Entry: $${gridState.entryPrice.toFixed(8)}
-Current: $${pnl.currentPrice.toFixed(8)}
-Change: ${((pnl.currentPrice - gridState.entryPrice) / gridState.entryPrice * 100).toFixed(2)}%
+Current: $${pnl.currentPriceUSD.toFixed(8)}
+Change: ${((pnl.currentPriceUSD - gridState.entryPrice) / gridState.entryPrice * 100).toFixed(2)}%
 
 Last checked: ${new Date(gridState.lastCheck).toLocaleTimeString()}
   `.trim();
