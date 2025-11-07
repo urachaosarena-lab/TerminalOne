@@ -92,7 +92,7 @@ ${getBotTitle()}
 📉 Max Drop: **${(config.dropPercent * config.numBuys).toFixed(1)}%**
 📈 Max Leap: **${(config.leapPercent * config.numSells).toFixed(1)}%**
 
-💰 **Investment:** ${config.initialAmount} SOL (${(config.initialAmount / 2).toFixed(3)} SOL initial buy + ${(config.initialAmount / 2).toFixed(3)} SOL for buys)
+💰 **Investment:** ${config.initialAmount.toFixed(4)} SOL (${(config.initialAmount / 2).toFixed(4)} SOL initial buy + ${(config.initialAmount / 2).toFixed(4)} SOL for buys)
 
 ⚠️ This is the total SOL reserved for grid trading.
   `.trim();
@@ -387,11 +387,11 @@ ${getBotTitle()}
 🚀 **Launch Confirmation**
 
 🎯 **Token:** ${analysis.symbol} (${analysis.name})
-💰 **Initial Amount:** ${config.initialAmount} SOL
+💰 **Initial Amount:** ${config.initialAmount.toFixed(4)} SOL
 📊 **Strategy Score:** ${analysis.suitabilityScore}/100
 
 ⚠️ **Grid Setup:**
-• Initial Buy: **${(config.initialAmount / 2).toFixed(3)} SOL**
+• Initial Buy: **${(config.initialAmount / 2).toFixed(4)} SOL**
 • Buy Orders: **${config.numBuys}** (↓${(config.dropPercent * config.numBuys).toFixed(1)}%)
 • Sell Orders: **${config.numSells}** (↑${(config.leapPercent * config.numSells).toFixed(1)}%)
 • Risk Level: **${analysis.riskLevel}**
@@ -439,18 +439,6 @@ async function handleExecuteLaunch(ctx) {
     const result = await ctx.services.grid.launchGrid(userId, analysis.tokenAddress);
     
     if (result.success) {
-      // Format token amount - tokensReceived is already in human-readable format
-      let formattedTokens;
-      if (result.tokensReceived < 0.0001) {
-        formattedTokens = result.tokensReceived.toFixed(8);
-      } else if (result.tokensReceived < 0.01) {
-        formattedTokens = result.tokensReceived.toFixed(6);
-      } else if (result.tokensReceived < 1) {
-        formattedTokens = result.tokensReceived.toFixed(4);
-      } else {
-        formattedTokens = result.tokensReceived.toFixed(2);
-      }
-      
       const tokenSymbol = result.tokenMetadata?.symbol || analysis.symbol;
       
       const message = `
@@ -460,8 +448,8 @@ ${getBotTitle()}
 
 **Token:** ${tokenSymbol} (${analysis.name || result.tokenMetadata?.name || 'Unknown'})
 **Grid ID:** \`${result.gridId.slice(5, 18)}\`
-**Entry Price:** $${result.entryPrice.toFixed(8)}
-**Initial Tokens:** ${formattedTokens} ${tokenSymbol}
+**Entry Price:** $${result.entryPrice.toFixed(2)}
+**Initial Tokens:** ${result.tokensReceived.toFixed(6)} ${tokenSymbol}
 
 **Grid Setup:**
 📉 ${result.buyGrids} buy orders below entry
@@ -590,19 +578,6 @@ async function handleViewGrid(ctx) {
   const tokenName = gridState.tokenName || 'Unknown Token';
   const tokenSymbol = gridState.tokenSymbol || 'UNKNOWN';
   
-  // Format token amount - tokensHeld is already in human-readable format
-  // Just format with appropriate decimals
-  let formattedTokenAmount;
-  if (pnl.tokensHeld < 0.0001) {
-    formattedTokenAmount = pnl.tokensHeld.toFixed(8);
-  } else if (pnl.tokensHeld < 0.01) {
-    formattedTokenAmount = pnl.tokensHeld.toFixed(6);
-  } else if (pnl.tokensHeld < 1) {
-    formattedTokenAmount = pnl.tokensHeld.toFixed(4);
-  } else {
-    formattedTokenAmount = pnl.tokensHeld.toFixed(2);
-  }
-  
   const message = `
 ${getBotTitle()}
 
@@ -619,7 +594,7 @@ ${pnlColor} **P&L:** ${pnl.totalPnL >= 0 ? '+' : ''}${pnl.totalPnL.toFixed(4)} S
 **Position:**
 💰 Invested: ${pnl.totalInvested.toFixed(4)} SOL
 💵 Realized: ${pnl.totalRealized.toFixed(4)} SOL
-🪙 Tokens Held: ${formattedTokenAmount} ${tokenSymbol}
+🪙 Tokens Held: ${pnl.tokensHeld.toFixed(6)} ${tokenSymbol}
 💲 Value: ${pnl.currentTotalValueSOL.toFixed(4)} SOL ($${pnl.currentTotalValueUSD.toFixed(2)})
 
 **Trading:**
@@ -628,8 +603,8 @@ ${pnlColor} **P&L:** ${pnl.totalPnL >= 0 ? '+' : ''}${pnl.totalPnL.toFixed(4)} S
 📊 Total Orders: ${pnl.totalOrders}
 
 **Price:**
-Entry: $${gridState.entryPrice.toFixed(8)}
-Current: $${pnl.currentPriceUSD.toFixed(8)}
+Entry: $${gridState.entryPrice.toFixed(2)}
+Current: $${pnl.currentPriceUSD.toFixed(2)}
 Change: ${((pnl.currentPriceUSD - gridState.entryPrice) / gridState.entryPrice * 100).toFixed(2)}%
 
 Last checked: ${new Date(gridState.lastCheck).toLocaleTimeString()}
@@ -673,7 +648,7 @@ ${pnlEmoji} **Final P&L:** ${result.pnl >= 0 ? '+' : ''}${result.pnl.toFixed(4)}
 **Summary:**
 💰 Total Invested: ${result.totalInvested.toFixed(4)} SOL
 💵 Total Realized: ${result.totalRealized.toFixed(4)} SOL
-🪙 Tokens Held: ${result.tokensHeld.toLocaleString()}
+🪙 Tokens Held: ${result.tokensHeld.toFixed(6)}
 📊 Orders Filled: ${result.filledOrders}
 
 Grid monitoring has been stopped. You can still view the grid history.
