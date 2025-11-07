@@ -4,9 +4,10 @@ const { Transaction, VersionedTransaction, VersionedMessage, Keypair, SystemProg
 const logger = require('../utils/logger');
 
 class JupiterTradingService {
-  constructor(solanaService, walletService) {
+  constructor(solanaService, walletService, tokenMetadataService = null) {
     this.solanaService = solanaService;
     this.walletService = walletService;
+    this.tokenMetadataService = tokenMetadataService;
     
     // Set DNS to Google DNS to avoid local DNS issues
     dns.setServers(['8.8.8.8', '8.8.4.4']);
@@ -291,8 +292,19 @@ class JupiterTradingService {
       );
 
       if (result.success) {
-        // Calculate actual tokens received
-        const tokensReceived = parseInt(quote.outAmount) / 1e6;
+        // Get token metadata for correct decimals
+        let tokenDecimals = 9; // Default
+        if (this.tokenMetadataService) {
+          try {
+            const metadata = await this.tokenMetadataService.getTokenMetadata(tokenAddress, this.solanaService);
+            tokenDecimals = metadata.decimals;
+          } catch (e) {
+            logger.warn(`Failed to get token decimals for ${tokenAddress}, using default 9`);
+          }
+        }
+        
+        // Calculate actual tokens received with correct decimals
+        const tokensReceived = parseInt(quote.outAmount) / Math.pow(10, tokenDecimals);
         
         // Calculate platform fee from SOL amount
         const feeAmount = solAmount * 0.01; // 1% fee
@@ -368,8 +380,19 @@ class JupiterTradingService {
         keyPair: keyPair
       };
 
-      // Convert token amount (adjust for token decimals)
-      const tokenAmountLamports = Math.floor(tokenAmount * 1e6); // Assume 6 decimals
+      // Get token metadata for correct decimals
+      let tokenDecimals = 9; // Default
+      if (this.tokenMetadataService) {
+        try {
+          const metadata = await this.tokenMetadataService.getTokenMetadata(tokenAddress, this.solanaService);
+          tokenDecimals = metadata.decimals;
+        } catch (e) {
+          logger.warn(`Failed to get token decimals for ${tokenAddress}, using default 9`);
+        }
+      }
+
+      // Convert token amount with correct decimals
+      const tokenAmountLamports = Math.floor(tokenAmount * Math.pow(10, tokenDecimals));
 
       logger.info(`Executing sell trade for user ${userId}:`, {
         tokenAddress,

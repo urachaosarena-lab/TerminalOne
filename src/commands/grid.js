@@ -439,15 +439,26 @@ async function handleExecuteLaunch(ctx) {
     const result = await ctx.services.grid.launchGrid(userId, analysis.tokenAddress);
     
     if (result.success) {
+      // Format token amount
+      const tokenMetadataService = ctx.services?.tokenMetadata;
+      let formattedTokens = result.tokensReceived.toLocaleString();
+      if (tokenMetadataService && result.tokenMetadata) {
+        formattedTokens = tokenMetadataService.formatTokenDisplay(
+          result.tokensReceived,
+          0, // Already in human-readable format
+          result.tokenMetadata.symbol || analysis.symbol
+        );
+      }
+      
       const message = `
 ${getBotTitle()}
 
 ✅ **GRID LAUNCHED SUCCESSFULLY!**
 
-**Token:** ${analysis.symbol}
+**Token:** ${analysis.symbol} (${analysis.name || 'Unknown'})
 **Grid ID:** \`${result.gridId.slice(5, 18)}\`
 **Entry Price:** $${result.entryPrice.toFixed(8)}
-**Initial Tokens:** ${result.tokensReceived.toLocaleString()}
+**Initial Tokens:** ${formattedTokens}
 
 **Grid Setup:**
 📉 ${result.buyGrids} buy orders below entry
@@ -534,8 +545,8 @@ Select a grid to view details:
   
   const buttons = activeGrids.map(grid => {
     const shortId = grid.gridId.slice(5, 13);
-    const tokenShort = `${grid.tokenAddress.slice(0, 4)}...${grid.tokenAddress.slice(-4)}`;
-    return [Markup.button.callback(`📊 ${tokenShort} (${shortId})`, `grid_view_${grid.gridId}`)];
+    const tokenDisplay = grid.tokenSymbol || `${grid.tokenAddress.slice(0, 4)}...${grid.tokenAddress.slice(-4)}`;
+    return [Markup.button.callback(`📊 ${tokenDisplay} (${shortId})`, `grid_view_${grid.gridId}`)];
   });
   
   buttons.push([Markup.button.callback('🔙 Back', 'grid_menu')]);
@@ -573,13 +584,28 @@ async function handleViewGrid(ctx) {
   
   const runtime = Math.floor((new Date() - gridState.createdAt) / 1000 / 60);
   
+  // Format token amount with correct decimals
+  const tokenMetadataService = ctx.services?.tokenMetadata;
+  let formattedTokenAmount = pnl.tokensHeld.toLocaleString();
+  if (tokenMetadataService && gridState.tokenDecimals) {
+    formattedTokenAmount = tokenMetadataService.formatTokenDisplay(
+      pnl.tokensHeld, 
+      0, // Already in human-readable format from P&L calculation
+      gridState.tokenSymbol || ''
+    );
+  }
+  
+  const tokenName = gridState.tokenName || 'Unknown Token';
+  const tokenSymbol = gridState.tokenSymbol || 'UNKNOWN';
+  
   const message = `
 ${getBotTitle()}
 
 **GRID DETAILS**
 
 **Status:** ${gridState.status === 'active' ? '🟢 Active' : '🔴 Stopped'}
-**Token:** \`${gridState.tokenAddress.slice(0, 8)}...${gridState.tokenAddress.slice(-8)}\`
+**Token:** ${tokenSymbol} (${tokenName})
+**Contract:** \`${gridState.tokenAddress.slice(0, 8)}...${gridState.tokenAddress.slice(-8)}\`
 **Runtime:** ${runtime} minutes
 
 **Performance:**
@@ -588,7 +614,7 @@ ${pnlColor} **P&L:** ${pnl.totalPnL >= 0 ? '+' : ''}${pnl.totalPnL.toFixed(4)} S
 **Position:**
 💰 Invested: ${pnl.totalInvested.toFixed(4)} SOL
 💵 Realized: ${pnl.totalRealized.toFixed(4)} SOL
-🪙 Tokens Held: ${pnl.tokensHeld.toLocaleString()}
+🪙 Tokens Held: ${formattedTokenAmount}
 💲 Value: ${pnl.currentTotalValue.toFixed(4)} SOL
 
 **Trading:**

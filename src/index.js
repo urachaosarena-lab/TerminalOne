@@ -6,6 +6,7 @@ const WalletService = require('./services/WalletService');
 const EnhancedPriceService = require('./services/EnhancedPriceService');
 const RealtimePriceService = require('./services/RealtimePriceService');
 const TokenAnalysisService = require('./services/TokenAnalysisService');
+const TokenMetadataService = require('./services/TokenMetadataService');
 const MartingaleStrategy = require('./services/MartingaleStrategy');
 const GridTradingService = require('./services/GridTradingService');
 const RevenueService = require('./services/RevenueService');
@@ -38,11 +39,12 @@ class TerminalOneBot {
     this.solanaService = new SolanaService();
     this.enhancedPriceService = new EnhancedPriceService();
     this.realtimePriceService = new RealtimePriceService();
+    this.tokenMetadataService = new TokenMetadataService();
     this.walletService = new WalletService(this.solanaService);
     this.tokenAnalysisService = new TokenAnalysisService(this.enhancedPriceService);
     
-    // Trading service
-    this.jupiterTradingService = new JupiterTradingService(this.solanaService, this.walletService);
+    // Trading service with metadata support
+    this.jupiterTradingService = new JupiterTradingService(this.solanaService, this.walletService, this.tokenMetadataService);
     
     // Production services
     this.revenueService = new RevenueService(this.solanaService);
@@ -60,11 +62,12 @@ class TerminalOneBot {
       this.tradingHistoryService // trading history service for analytics
     );
     
-    // Grid trading service
+    // Grid trading service with metadata support
     this.gridTradingService = new GridTradingService(
       this.jupiterTradingService,
       this.enhancedPriceService,
-      this.walletService
+      this.walletService,
+      this.tokenMetadataService
     );
     
     // RPG Game services
@@ -119,6 +122,7 @@ class TerminalOneBot {
         solana: this.solanaService,
         price: this.enhancedPriceService,
         realtime: this.realtimePriceService,
+        tokenMetadata: this.tokenMetadataService,
         wallet: this.walletService,
         tokenAnalysis: this.tokenAnalysisService,
         martingale: this.martingaleService,

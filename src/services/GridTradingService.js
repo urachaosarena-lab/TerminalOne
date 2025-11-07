@@ -3,10 +3,11 @@ const fs = require('fs');
 const path = require('path');
 
 class GridTradingService {
-  constructor(jupiterTradingService, enhancedPriceService, walletService) {
+  constructor(jupiterTradingService, enhancedPriceService, walletService, tokenMetadataService = null) {
     this.jupiterService = jupiterTradingService;
     this.priceService = enhancedPriceService;
     this.walletService = walletService;
+    this.tokenMetadataService = tokenMetadataService;
     
     // Active grids: userId -> gridId -> gridState
     this.activeGrids = new Map();
@@ -223,11 +224,25 @@ class GridTradingService {
       const buyGrids = this.calculateBuyGrids(entryPrice, config);
       const sellGrids = this.calculateSellGrids(entryPrice, config);
       
+      // Fetch token metadata
+      let tokenMetadata = { symbol: 'UNKNOWN', name: 'Unknown Token', decimals: 9 };
+      if (this.tokenMetadataService) {
+        try {
+          tokenMetadata = await this.tokenMetadataService.getTokenMetadata(tokenAddress);
+          logger.info(`Fetched token metadata for grid:`, tokenMetadata);
+        } catch (e) {
+          logger.warn(`Failed to fetch token metadata for ${tokenAddress}:`, e.message);
+        }
+      }
+      
       // Create grid state
       const gridId = `grid_${userId}_${Date.now()}`;
       const gridState = {
         gridId,
         tokenAddress,
+        tokenSymbol: tokenMetadata.symbol,
+        tokenName: tokenMetadata.name,
+        tokenDecimals: tokenMetadata.decimals,
         status: 'active',
         config: { ...config },
         entryPrice,
@@ -273,6 +288,7 @@ class GridTradingService {
         gridId,
         entryPrice,
         tokensReceived: buyResult.tokensReceived,
+        tokenMetadata: tokenMetadata,
         buyGrids: gridState.buyGrids.length,
         sellGrids: gridState.sellGrids.length
       };
