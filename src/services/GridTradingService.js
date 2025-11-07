@@ -652,16 +652,34 @@ class GridTradingService {
       const currentTotalValueSOL = gridState.totalRealized + unrealizedValueSOL;
       const currentTotalValueUSD = currentTotalValueSOL * solPriceUSD;
       
+      // Fix for grids created with wrong decimal calculation
+      // If tokensHeld seems 100x too high based on investment vs price, divide by 100
+      let correctedTokensHeld = gridState.tokensHeld;
+      const expectedTokens = (gridState.totalInvested * solPriceUSD) / currentPriceUSD;
+      const ratio = correctedTokensHeld / expectedTokens;
+      
+      if (ratio > 50 && ratio < 150) {
+        // Tokens are roughly 100x too high, apply correction
+        correctedTokensHeld = correctedTokensHeld / 100;
+        logger.warn(`Applied 100x correction to tokensHeld for grid ${gridId}: ${gridState.tokensHeld} -> ${correctedTokensHeld}`);
+      }
+      
+      // Recalculate with corrected tokens
+      const correctedUnrealizedValueUSD = correctedTokensHeld * currentPriceUSD;
+      const correctedUnrealizedValueSOL = correctedUnrealizedValueUSD / solPriceUSD;
+      const correctedCurrentTotalValueSOL = gridState.totalRealized + correctedUnrealizedValueSOL;
+      const correctedCurrentTotalValueUSD = correctedCurrentTotalValueSOL * solPriceUSD;
+      
       return {
         totalInvested: gridState.totalInvested,
         totalRealized: gridState.totalRealized,
-        tokensHeld: gridState.tokensHeld,
+        tokensHeld: correctedTokensHeld,
         currentPriceUSD, // Token price in USD
         solPriceUSD, // SOL price in USD
-        currentTotalValueSOL, // Total portfolio value in SOL (realized + unrealized)
-        currentTotalValueUSD, // Total portfolio value in USD
-        unrealizedValueSOL, // Value of tokens held in SOL
-        unrealizedValueUSD, // Value of tokens held in USD
+        currentTotalValueSOL: correctedCurrentTotalValueSOL, // Total portfolio value in SOL (realized + unrealized)
+        currentTotalValueUSD: correctedCurrentTotalValueUSD, // Total portfolio value in USD
+        unrealizedValueSOL: correctedUnrealizedValueSOL, // Value of tokens held in SOL
+        unrealizedValueUSD: correctedUnrealizedValueUSD, // Value of tokens held in USD
         totalPnL, // Cumulative P&L from sells only (0 until first sell)
         pnlPercent, // P&L as percentage of initial investment
         filledBuys: gridState.buyGrids.filter(g => g.filled).length,
