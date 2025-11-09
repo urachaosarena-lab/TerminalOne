@@ -30,6 +30,7 @@ const gridHandlers = require('./commands/grid');
 const heroHandlers = require('./commands/hero');
 const battleHandlers = require('./commands/battle');
 const dashboardHandlers = require('./commands/dashboard');
+const activeBotsHandlers = require('./commands/activeBots');
 
 class TerminalOneBot {
   constructor() {
@@ -79,7 +80,8 @@ class TerminalOneBot {
       this.walletService,
       this.martingaleService,
       this.heroService,
-      this.revenueService
+      this.revenueService,
+      this.gridTradingService // Add grid service
     );
     
     // Make services available to bot context (deprecated - use middleware)
@@ -384,6 +386,9 @@ class TerminalOneBot {
     
     // Dashboard callback
     this.bot.action('dashboard', dashboardHandlers.handleDashboard);
+    
+    // Active Bots callback
+    this.bot.action('active_bots', activeBotsHandlers.handleActiveBots);
     
     // Placeholder callbacks for future features
     this.bot.action('portfolio', (ctx) => {

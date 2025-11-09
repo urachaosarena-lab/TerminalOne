@@ -80,7 +80,7 @@ ${balanceInfo.hasWallet ? `\n📍 \`${balanceInfo.publicKey.slice(0,5)}...${bala
     const keyboard = balanceInfo.hasWallet ? 
       // User has wallet - show main menu
       Markup.inlineKeyboard([
-        [Markup.button.callback('💰 Wallet', 'wallet'), Markup.button.callback('📊 Active Strategies', 'martingale_active')],
+        [Markup.button.callback('💰 Wallet', 'wallet'), Markup.button.callback('💻 Active Bots', 'active_bots')],
         [Markup.button.callback('🤖 Strategies', 'strategies_menu'), Markup.button.callback('⚔️ Hero', 'hero_menu')],
         [Markup.button.callback('📊 Dashboard', 'dashboard'), Markup.button.callback('🔄 Trade', 'trade')],
         [Markup.button.callback('⚙️ Settings', 'settings'), Markup.button.callback('❓ Help', 'help')]

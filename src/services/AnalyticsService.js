@@ -3,11 +3,12 @@ const path = require('path');
 const logger = require('../utils/logger');
 
 class AnalyticsService {
-  constructor(walletService, martingaleService, heroService, revenueService) {
+  constructor(walletService, martingaleService, heroService, revenueService, gridService = null) {
     this.walletService = walletService;
     this.martingaleService = martingaleService;
     this.heroService = heroService;
     this.revenueService = revenueService;
+    this.gridService = gridService;
     
     // File persistence for user activity tracking
     this.userActivityPath = path.join(__dirname, '../../data/user_activity.json');
@@ -126,9 +127,19 @@ class AnalyticsService {
   getTotalStrategiesLaunched() {
     let total = 0;
     
+    // Count Martingale strategies
     if (this.martingaleService && this.martingaleService.activeStrategies) {
       this.martingaleService.activeStrategies.forEach((strategies) => {
         total += strategies.length;
+      });
+    }
+    
+    // Count Grid strategies
+    if (this.gridService && this.gridService.activeGrids) {
+      this.gridService.activeGrids.forEach((userData) => {
+        if (userData.grids) {
+          total += userData.grids.size;
+        }
       });
     }
     
@@ -141,9 +152,23 @@ class AnalyticsService {
   getActiveStrategiesCount() {
     let active = 0;
     
+    // Count active Martingale strategies
     if (this.martingaleService && this.martingaleService.activeStrategies) {
       this.martingaleService.activeStrategies.forEach((strategies) => {
         active += strategies.filter(s => s.status === 'active').length;
+      });
+    }
+    
+    // Count active Grid strategies
+    if (this.gridService && this.gridService.activeGrids) {
+      this.gridService.activeGrids.forEach((userData) => {
+        if (userData.grids) {
+          userData.grids.forEach((grid) => {
+            if (grid.status === 'active') {
+              active++;
+            }
+          });
+        }
       });
     }
     
@@ -156,11 +181,23 @@ class AnalyticsService {
   getTotalTradingVolume() {
     let totalVolume = 0;
     
+    // Add Martingale volume
     if (this.martingaleService && this.martingaleService.activeStrategies) {
       this.martingaleService.activeStrategies.forEach((strategies) => {
         strategies.forEach(strategy => {
           totalVolume += strategy.totalInvested || 0;
         });
+      });
+    }
+    
+    // Add Grid volume
+    if (this.gridService && this.gridService.activeGrids) {
+      this.gridService.activeGrids.forEach((userData) => {
+        if (userData.grids) {
+          userData.grids.forEach((grid) => {
+            totalVolume += grid.initialAmount || 0;
+          });
+        }
       });
     }
     

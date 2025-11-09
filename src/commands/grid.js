@@ -132,7 +132,7 @@ async function handleConfigChange(ctx, paramType) {
   const config = ctx.services.grid.getUserConfig(userId);
   
   const paramInfo = {
-    initial: { name: 'Initial Amount', unit: 'SOL', min: 0.04, max: 100, key: 'initialAmount' },
+    initial: { name: 'Initial Amount', unit: ' SOL', min: 0.04, max: 100, key: 'initialAmount' },
     buys: { name: 'Buy Orders', unit: '', min: 2, max: 50, key: 'numBuys' },
     sells: { name: 'Sell Orders', unit: '', min: 2, max: 50, key: 'numSells' },
     drop: { name: 'Drop %', unit: '%', min: 0.2, max: 33, key: 'dropPercent' },
@@ -140,27 +140,48 @@ async function handleConfigChange(ctx, paramType) {
   };
   
   const info = paramInfo[paramType];
+  if (!info) {
+    await ctx.answerCbQuery('❌ Invalid parameter type');
+    return;
+  }
+  
   const currentValue = config[info.key];
   
   const message = `
 ${getBotTitle()}
 
-**${info.name}**
+⚙️ **Configure: ${info.name}**
 
-Current: **${currentValue}${info.unit}**
-Range: ${info.min} - ${info.max}${info.unit}
+**Current Value:** ${currentValue}${info.unit}
+**Valid Range:** ${info.min} - ${info.max}${info.unit}
 
-Please send the new value:
+📝 Please send the new value as a number:
   `.trim();
   
-  await ctx.editMessageText(message, {
-    parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard([
-      [Markup.button.callback('🔙 Cancel', 'grid_configure')]
-    ])
-  });
-  
-  await ctx.answerCbQuery();
+  try {
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback('❌ Cancel', 'grid_configure')]
+      ])
+    });
+    await ctx.answerCbQuery();
+  } catch (error) {
+    if (error.description?.includes('message to edit not found') || error.description?.includes('message is not modified')) {
+      // Message was deleted or unchanged, send new one
+      await ctx.reply(message, {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback('❌ Cancel', 'grid_configure')]
+        ])
+      });
+      await ctx.answerCbQuery();
+    } else {
+      logger.error('Error in handleConfigChange:', error);
+      await ctx.answerCbQuery('❌ Error displaying configuration prompt');
+      return;
+    }
+  }
   
   // Set awaiting state
   ctx.session.awaitingGridConfig = info.key;
@@ -176,25 +197,62 @@ async function handleConfigValueInput(ctx) {
   if (!configKey) return;
   
   try {
+    // Delete user's message
+    try {
+      await ctx.deleteMessage();
+    } catch (e) {
+      // Ignore delete errors
+    }
+    
     const value = parseFloat(ctx.message.text);
     
     if (isNaN(value)) {
-      await ctx.reply('❌ Invalid number. Please try again.');
+      const errorMsg = await ctx.reply('❌ Invalid number. Please enter a valid number.');
+      // Auto-delete error message after 3 seconds
+      setTimeout(() => {
+        try {
+          ctx.telegram.deleteMessage(ctx.chat.id, errorMsg.message_id);
+        } catch (e) {
+          // Ignore
+        }
+      }, 3000);
       return;
     }
     
     const result = ctx.services.grid.updateConfig(userId, configKey, value);
     
     if (result.success) {
-      await ctx.reply(`✅ Configuration updated successfully!`);
       delete ctx.session.awaitingGridConfig;
+      
+      // Show success notification
+      const successMsg = await ctx.reply(`✅ Updated successfully!`);
+      
+      // Auto-delete success message after 2 seconds
+      setTimeout(() => {
+        try {
+          ctx.telegram.deleteMessage(ctx.chat.id, successMsg.message_id);
+        } catch (e) {
+          // Ignore
+        }
+      }, 2000);
+      
+      // Return to config menu
       await handleConfigurationMenu(ctx);
     } else {
-      await ctx.reply(`❌ ${result.error}`);
+      const errorMsg = await ctx.reply(`❌ ${result.error}`);
+      // Auto-delete error message after 3 seconds
+      setTimeout(() => {
+        try {
+          ctx.telegram.deleteMessage(ctx.chat.id, errorMsg.message_id);
+        } catch (e) {
+          // Ignore
+        }
+      }, 3000);
     }
   } catch (error) {
     logger.error('Config value input error:', error);
-    await ctx.reply('❌ Error updating configuration');
+    await ctx.reply('❌ Error updating configuration. Please try again.');
+    delete ctx.session.awaitingGridConfig;
   }
 }
 
@@ -673,15 +731,29 @@ async function handleResetConfig(ctx) {
   const userId = ctx.from.id;
   const gridService = ctx.services?.grid;
   
-  // Reset to defaults
-  gridService.getUserConfig(userId).initialAmount = 0.10;
-  gridService.getUserConfig(userId).numBuys = 10;
-  gridService.getUserConfig(userId).numSells = 10;
-  gridService.getUserConfig(userId).dropPercent = 2;
-  gridService.getUserConfig(userId).leapPercent = 4;
+  if (!gridService) {
+    await ctx.answerCbQuery('❌ Grid service not available');
+    return;
+  }
   
-  await ctx.answerCbQuery('✅ Configuration reset to defaults!');
-  await handleConfigurationMenu(ctx);
+  try {
+    // Reset to defaults
+    const config = gridService.getUserConfig(userId);
+    config.initialAmount = 0.10;
+    config.numBuys = 10;
+    config.numSells = 10;
+    config.dropPercent = 2;
+    config.leapPercent = 4;
+    
+    // Save to file
+    gridService.saveGridsToFile();
+    
+    await ctx.answerCbQuery('✅ Configuration reset to defaults!');
+    await handleConfigurationMenu(ctx);
+  } catch (error) {
+    logger.error('Error resetting grid config:', error);
+    await ctx.answerCbQuery('❌ Error resetting configuration');
+  }
 }
 
 module.exports = {

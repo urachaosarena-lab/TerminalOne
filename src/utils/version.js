@@ -28,10 +28,12 @@ function getVersion() {
  */
 function getBotTitle(context = '') {
   const version = getVersion();
+  const contextText = ''; // Context text for announcements (leave blank for production)
+  
   if (context) {
-    return `🦈TerminalOne | v${version} | 🕸️Grid Testing UPDATE! - ${context}`;
+    return contextText ? `🦈TerminalOne | v${version} | ${contextText} - ${context}` : `🦈TerminalOne | v${version} - ${context}`;
   }
-  return `🦈TerminalOne | v${version} | 🕸️Grid Testing UPDATE!`;
+  return contextText ? `🦈TerminalOne | v${version} | ${contextText}` : `🦈TerminalOne | v${version}`;
 }
 
 module.exports = { getVersion, getBotTitle };
