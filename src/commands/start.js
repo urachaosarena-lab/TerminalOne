@@ -103,7 +103,7 @@ module.exports = async (ctx) => {
       try {
         const hero = heroService.getHero(userId);
         if (hero) {
-          heroStatsText = `\n\n⚔️ **Hero**\n🧪 **Level:** ${hero.level} | 🌡️ **XP:** ${hero.xp}/${hero.level * 100} | ⚡ **Energy:** ${hero.stats.energy}`;
+          heroStatsText = `\n\n⚔️ **Hero**\n🧪 **Level:** ${hero.level} | 🌡️ **XP:** ${hero.xp}/${hero.xpToNextLevel} | ⚡ **Energy:** ${hero.energy}/${hero.maxEnergy}`;
         }
       } catch (err) {
         // Hero not created yet, skip
