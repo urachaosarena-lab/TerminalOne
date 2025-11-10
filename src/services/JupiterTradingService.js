@@ -210,12 +210,45 @@ class JupiterTradingService {
   }
 
   /**
+   * Verify wallet has sufficient balance for trade
+   */
+  async verifyBalanceForTrade(userId, requiredSOL) {
+    const balanceInfo = await this.walletService.getWalletBalance(userId);
+    if (!balanceInfo.hasWallet) {
+      throw new Error('No wallet connected');
+    }
+    
+    // Reserve 0.01 SOL for transaction fees and rent exemption
+    const buffer = 0.01;
+    const totalRequired = requiredSOL + buffer;
+    
+    if (balanceInfo.balance < totalRequired) {
+      throw new Error(
+        `Insufficient balance: need ${totalRequired.toFixed(4)} SOL (${requiredSOL.toFixed(4)} + ${buffer} buffer), ` +
+        `but wallet has ${balanceInfo.balance.toFixed(4)} SOL`
+      );
+    }
+    
+    logger.info('Balance verification passed', {
+      userId,
+      required: requiredSOL,
+      buffer,
+      available: balanceInfo.balance
+    });
+    
+    return true;
+  }
+
+  /**
    * Execute a buy trade (SOL -> Token)
    */
   async executeBuy(userId, { tokenAddress, solAmount, maxSlippage = 3 }) {
     let currentAttempt = 0;
     
     return await this.executeWithRetry(async () => {
+      // Verify balance before attempting trade
+      await this.verifyBalanceForTrade(userId, solAmount);
+      
       // Increase slippage progressively on retries
       const adaptiveSlippage = maxSlippage + (currentAttempt * this.retryConfig.slippageIncreasePerRetry);
       if (currentAttempt > 0) {

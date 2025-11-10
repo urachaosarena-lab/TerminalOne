@@ -224,12 +224,21 @@ class EnhancedPriceService {
   }
 
   /**
-   * Smart token price fetching (tries multiple sources)
+   * Smart token price fetching (tries multiple sources with unified cache)
    */
   async getTokenPrice(tokenAddress) {
     // Handle SOL specifically
     if (tokenAddress === 'SOL' || tokenAddress === this.knownTokens.SOL) {
       return await this.getSolanaPrice();
+    }
+
+    // Check unified cache first (works across all sources)
+    const cacheKey = `price-${tokenAddress}`;
+    const cached = this.cache.get(cacheKey);
+    
+    if (cached && Date.now() - cached.timestamp < this.cacheTimeout) {
+      logger.debug(`Using cached price for ${tokenAddress} from ${cached.data.source}`);
+      return cached.data;
     }
 
     // Try sources in order of reliability: DexScreener -> CoinGecko -> Jupiter
@@ -244,6 +253,12 @@ class EnhancedPriceService {
         logger.info(`Trying ${source.name} for token ${tokenAddress}`);
         const result = await source.fn();
         if (result.price > 0) {
+          // Cache the successful result with unified key
+          this.cache.set(cacheKey, {
+            data: result,
+            timestamp: Date.now()
+          });
+          logger.info(`Successfully fetched and cached price from ${source.name}`);
           return result;
         }
       } catch (error) {
@@ -252,8 +267,14 @@ class EnhancedPriceService {
       }
     }
 
-    // If all sources fail, return fallback data
-    logger.error(`All price sources failed for ${tokenAddress}`);
+    // If all sources fail, check if we have ANY cached data (even expired)
+    if (cached) {
+      logger.warn(`All sources failed, using expired cache for ${tokenAddress}`);
+      return cached.data;
+    }
+
+    // If all sources fail and no cache, return fallback data
+    logger.error(`All price sources failed for ${tokenAddress}, no cache available`);
     return {
       price: 0,
       change24h: 0,

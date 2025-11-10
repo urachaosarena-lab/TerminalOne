@@ -14,6 +14,8 @@ class TokenMetadataService {
     this.cache = new Map();
     this.cacheTimeout = 3600000; // 1 hour cache for token metadata
     this.persistentCachePath = path.join(__dirname, '../../data/token_metadata_cache.json');
+    this.decimalsDbPath = path.join(__dirname, '../../data/token_decimals.json');
+    this.decimalsDb = new Map(); // Pre-populated decimal database
     
     // Ensure data directory exists
     const dataDir = path.dirname(this.persistentCachePath);
@@ -21,8 +23,33 @@ class TokenMetadataService {
       fs.mkdirSync(dataDir, { recursive: true });
     }
     
+    // Load decimal database
+    this.loadDecimalsDatabase();
+    
     // Load cached metadata from disk
     this.loadCacheFromDisk();
+  }
+
+  /**
+   * Load pre-populated decimals database
+   */
+  loadDecimalsDatabase() {
+    try {
+      if (fs.existsSync(this.decimalsDbPath)) {
+        const data = fs.readFileSync(this.decimalsDbPath, 'utf8');
+        const decimalsData = JSON.parse(data);
+        
+        Object.entries(decimalsData).forEach(([address, info]) => {
+          this.decimalsDb.set(address, info);
+        });
+        
+        logger.info(`Loaded ${this.decimalsDb.size} tokens from decimals database`);
+      } else {
+        logger.warn('Decimals database not found, will rely on API sources');
+      }
+    } catch (error) {
+      logger.error('Failed to load decimals database:', error);
+    }
   }
 
   /**
@@ -186,10 +213,22 @@ class TokenMetadataService {
 
   /**
    * Smart token metadata fetching
-   * Tries multiple sources: Cache -> Jupiter -> DexScreener -> OnChain
+   * Tries multiple sources: DecimalsDB -> Cache -> Jupiter -> DexScreener -> OnChain
    */
   async getTokenMetadata(tokenAddress, solanaService = null) {
-    // Check cache first
+    // Check decimals database first (highest priority)
+    const dbEntry = this.decimalsDb.get(tokenAddress);
+    if (dbEntry) {
+      logger.debug(`Using decimals database for ${tokenAddress}: ${dbEntry.decimals} decimals`);
+      return {
+        symbol: dbEntry.symbol,
+        name: dbEntry.symbol, // Use symbol as name for DB entries
+        decimals: dbEntry.decimals,
+        source: `db-${dbEntry.source}`
+      };
+    }
+
+    // Check cache second
     const cached = this.cache.get(tokenAddress);
     if (cached && Date.now() - cached.timestamp < this.cacheTimeout) {
       logger.debug(`Using cached metadata for ${tokenAddress}`);
