@@ -20,46 +20,93 @@ module.exports = async (ctx) => {
       `💰 **${balanceInfo.balance.toFixed(4)} SOL**` : 
       '💰 **No Wallet Connected**';
     
-    // Get active strategies info
+    // Get ALL active bots info (Martingale + Grid)
     const martingaleService = ctx.services?.martingale;
-    let strategiesText = '';
-    if (martingaleService && balanceInfo.hasWallet) {
-      const strategies = martingaleService.getUserStrategies(userId);
-      const activeStrategies = strategies.filter(s => s.status === 'active');
+    const gridService = ctx.services?.grid;
+    let activeBotsText = '';
+    
+    if (balanceInfo.hasWallet) {
+      let totalActiveBots = 0;
+      let totalPnL = 0;
+      let hasAnyPnL = false;
       
-      if (activeStrategies.length > 0) {
-        // Get SOL price for proper conversion
-        const solPriceData = await priceService.getSolanaPrice();
-        const solPrice = solPriceData.price || 200; // Fallback
+      // Get SOL price for proper conversion
+      const solPriceData = await priceService.getSolanaPrice();
+      const solPrice = solPriceData.price || 200; // Fallback
+      
+      // Count Martingale active strategies
+      if (martingaleService) {
+        const strategies = martingaleService.getUserStrategies(userId);
+        const activeStrategies = strategies.filter(s => s.status === 'active');
+        totalActiveBots += activeStrategies.length;
         
-        // Calculate PnL in SOL properly
-        const pnlResults = await Promise.all(activeStrategies.map(async (strategy) => {
-          let tokenPrice = strategy.averageBuyPrice || 0;
-          try {
-            const priceData = await priceService.getTokenPrice(strategy.tokenAddress);
-            tokenPrice = priceData.price || tokenPrice;
-          } catch (err) {
-            // Use stored price if fetch fails
-          }
+        if (activeStrategies.length > 0) {
+          hasAnyPnL = true;
+          const pnlResults = await Promise.all(activeStrategies.map(async (strategy) => {
+            let tokenPrice = strategy.averageBuyPrice || 0;
+            try {
+              const priceData = await priceService.getTokenPrice(strategy.tokenAddress);
+              tokenPrice = priceData.price || tokenPrice;
+            } catch (err) {
+              // Use stored price if fetch fails
+            }
+            
+            const currentValueUSD = strategy.totalTokens * tokenPrice;
+            const currentValueSOL = currentValueUSD / solPrice;
+            const pnl = currentValueSOL - strategy.totalInvested;
+            
+            return pnl;
+          }));
           
-          // Calculate current value in SOL: (tokens * token price USD) / SOL price USD
-          const currentValueUSD = strategy.totalTokens * tokenPrice;
-          const currentValueSOL = currentValueUSD / solPrice;
-          const pnl = currentValueSOL - strategy.totalInvested;
-          const roi = strategy.totalInvested > 0 ? (pnl / strategy.totalInvested * 100) : 0;
+          totalPnL += pnlResults.reduce((sum, pnl) => sum + pnl, 0);
+        }
+      }
+      
+      // Count Grid active strategies
+      if (gridService) {
+        const activeGrids = gridService.getUserActiveGrids(userId);
+        totalActiveBots += activeGrids.length;
+        
+        if (activeGrids.length > 0) {
+          hasAnyPnL = true;
+          const pnlResults = await Promise.all(activeGrids.map(async (grid) => {
+            try {
+              const priceData = await priceService.getTokenPrice(grid.tokenAddress);
+              const currentPrice = priceData.price || grid.currentPrice;
+              
+              const pnlData = await gridService.calculateGridPnL(grid, currentPrice, solPrice);
+              return pnlData.totalPnLSOL;
+            } catch (err) {
+              return 0;
+            }
+          }));
           
-          return { pnl, roi };
-        }));
-        
-        const totalPnL = pnlResults.reduce((sum, result) => sum + result.pnl, 0);
-        const avgRoi = pnlResults.reduce((sum, result) => sum + result.roi, 0) / pnlResults.length;
-        
+          totalPnL += pnlResults.reduce((sum, pnl) => sum + pnl, 0);
+        }
+      }
+      
+      // Format active bots display
+      if (totalActiveBots > 0 && hasAnyPnL) {
         const pnlEmoji = totalPnL >= 0 ? '🟢' : '🔴';
         const sign = totalPnL >= 0 ? '+' : '';
-        
-        strategiesText = `\n🤖 **Active Strategies:** ${activeStrategies.length} | ${pnlEmoji} ${sign}${totalPnL.toFixed(4)} SOL (${sign}${avgRoi.toFixed(1)}%)`;
+        activeBotsText = `\n💻 **Active Bots:** ${totalActiveBots} | ${pnlEmoji} ${sign}${totalPnL.toFixed(4)} SOL`;
       } else {
-        strategiesText = '\n🤖 **Active Strategies:** 0';
+        activeBotsText = `\n💻 **Active Bots:** ${totalActiveBots}`;
+      }
+    }
+
+    // Get Hero stats
+    const heroService = ctx.services?.hero;
+    let heroStatsText = '';
+    
+    if (heroService && balanceInfo.hasWallet) {
+      try {
+        const hero = heroService.getHero(userId);
+        if (hero) {
+          heroStatsText = `\n\n⚔️ **Hero**\n🧪 **Level:** ${hero.level} | 🌡️ **XP:** ${hero.xp}/${hero.level * 100} | ⚡ **Energy:** ${hero.stats.energy}`;
+        }
+      } catch (err) {
+        // Hero not created yet, skip
       }
     }
 
@@ -72,18 +119,15 @@ ${getBotTitle()}
 ${priceInfo}
 
 ${balanceText}
-${balanceInfo.hasWallet ? `\n📍 \`${balanceInfo.publicKey.slice(0,5)}...${balanceInfo.publicKey.slice(-5)}\`` : ''}${strategiesText}
-
-🚀 *Ready to dominate the Solana ecosystem?*
+${balanceInfo.hasWallet ? `\n📍 \`${balanceInfo.publicKey.slice(0,5)}...${balanceInfo.publicKey.slice(-5)}\`` : ''}${activeBotsText}${heroStatsText}
     `;
 
     const keyboard = balanceInfo.hasWallet ? 
       // User has wallet - show main menu
       Markup.inlineKeyboard([
         [Markup.button.callback('💰 Wallet', 'wallet'), Markup.button.callback('💻 Active Bots', 'active_bots')],
-        [Markup.button.callback('🤖 Strategies', 'strategies_menu'), Markup.button.callback('⚔️ Hero', 'hero_menu')],
-        [Markup.button.callback('📊 Dashboard', 'dashboard'), Markup.button.callback('🔄 Trade', 'trade')],
-        [Markup.button.callback('⚙️ Settings', 'settings'), Markup.button.callback('❓ Help', 'help')]
+        [Markup.button.callback('🤖 Initiate Bot', 'strategies_menu'), Markup.button.callback('⚔️ Hero', 'hero_menu')],
+        [Markup.button.callback('📊 Dashboard', 'dashboard'), Markup.button.callback('❓ Help', 'help')]
       ]) :
       // User has no wallet - show wallet setup
       Markup.inlineKeyboard([
