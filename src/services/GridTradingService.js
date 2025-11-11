@@ -652,21 +652,51 @@ class GridTradingService {
       const currentTotalValueSOL = gridState.totalRealized + unrealizedValueSOL;
       const currentTotalValueUSD = currentTotalValueSOL * solPriceUSD;
       
+      // SMART CORRECTION for legacy grids created with wrong decimals
+      // Detect if tokensHeld is suspiciously high (100x error from wrong decimals)
+      let correctedTokensHeld = gridState.tokensHeld;
+      let correctionApplied = false;
+      
+      // Calculate expected tokens based on investment
+      const expectedTokens = (gridState.totalInvested * solPriceUSD) / currentPriceUSD;
+      const ratio = gridState.tokensHeld / expectedTokens;
+      
+      // If ratio is ~100 (between 50-150), this is likely a legacy grid with wrong decimals
+      // Only apply correction if it makes the value more realistic
+      if (ratio > 50 && ratio < 150) {
+        const testCorrectedTokens = gridState.tokensHeld / 100;
+        const testRatio = testCorrectedTokens / expectedTokens;
+        
+        // If dividing by 100 brings ratio close to 1, apply correction
+        if (testRatio > 0.5 && testRatio < 2.0) {
+          correctedTokensHeld = testCorrectedTokens;
+          correctionApplied = true;
+          logger.warn(`Applied legacy decimal correction to grid ${gridId}: ${gridState.tokensHeld.toFixed(6)} -> ${correctedTokensHeld.toFixed(6)} tokens`);
+        }
+      }
+      
+      // Recalculate values with corrected tokens
+      const finalUnrealizedValueUSD = correctedTokensHeld * currentPriceUSD;
+      const finalUnrealizedValueSOL = finalUnrealizedValueUSD / solPriceUSD;
+      const finalCurrentTotalValueSOL = gridState.totalRealized + finalUnrealizedValueSOL;
+      const finalCurrentTotalValueUSD = finalCurrentTotalValueSOL * solPriceUSD;
+      
       return {
         totalInvested: gridState.totalInvested,
         totalRealized: gridState.totalRealized,
-        tokensHeld: gridState.tokensHeld,
+        tokensHeld: correctedTokensHeld, // Use corrected value
         currentPriceUSD, // Token price in USD
         solPriceUSD, // SOL price in USD
-        currentTotalValueSOL, // Total portfolio value in SOL (realized + unrealized)
-        currentTotalValueUSD, // Total portfolio value in USD
-        unrealizedValueSOL, // Value of tokens held in SOL
-        unrealizedValueUSD, // Value of tokens held in USD
+        currentTotalValueSOL: finalCurrentTotalValueSOL, // Use corrected value
+        currentTotalValueUSD: finalCurrentTotalValueUSD, // Use corrected value
+        unrealizedValueSOL: finalUnrealizedValueSOL, // Use corrected value
+        unrealizedValueUSD: finalUnrealizedValueUSD, // Use corrected value
         totalPnL, // Cumulative P&L from sells only (0 until first sell)
         pnlPercent, // P&L as percentage of initial investment
         filledBuys: gridState.buyGrids.filter(g => g.filled).length,
         filledSells,
-        totalOrders: gridState.filledOrders.length
+        totalOrders: gridState.filledOrders.length,
+        correctionApplied // Flag to indicate if legacy correction was applied
       };
     } catch (error) {
       logger.error('P&L calculation failed:', { userId, gridId, error: error.message });
