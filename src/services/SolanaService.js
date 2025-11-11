@@ -194,6 +194,47 @@ class SolanaService {
     throw lastError;
   }
 
+  /**
+   * Get token decimals from on-chain mint account (most reliable source)
+   */
+  async getTokenDecimals(tokenMintAddress) {
+    if (!this.isInitialized) {
+      throw new Error('Solana service not initialized');
+    }
+
+    try {
+      const mintPublicKey = new PublicKey(tokenMintAddress);
+      
+      // Fetch mint account info with failover
+      const accountInfo = await this.executeWithFailover(
+        (conn) => conn.getParsedAccountInfo(mintPublicKey),
+        'Get Token Mint Info'
+      );
+      
+      if (!accountInfo || !accountInfo.value) {
+        logger.warn(`No account info found for token ${tokenMintAddress}`);
+        return null;
+      }
+      
+      // Check if it's a valid token mint account
+      if (accountInfo.value.data && accountInfo.value.data.parsed) {
+        const decimals = accountInfo.value.data.parsed.info.decimals;
+        
+        if (typeof decimals === 'number') {
+          logger.info(`Fetched decimals from on-chain for ${tokenMintAddress}: ${decimals}`);
+          return decimals;
+        }
+      }
+      
+      logger.warn(`Could not parse decimals from account info for ${tokenMintAddress}`);
+      return null;
+      
+    } catch (error) {
+      logger.error(`Failed to fetch token decimals on-chain for ${tokenMintAddress}:`, error.message);
+      return null;
+    }
+  }
+
   async getAccountInfo(publicKeyString) {
     if (!this.isInitialized) {
       throw new Error('Solana service not initialized');

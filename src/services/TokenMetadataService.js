@@ -249,6 +249,53 @@ class TokenMetadataService {
       });
     }
 
+    // Try on-chain first if solanaService available (most reliable for decimals)
+    if (solanaService) {
+      try {
+        logger.debug(`Trying on-chain for token decimals: ${tokenAddress}`);
+        const onChainDecimals = await solanaService.getTokenDecimals(tokenAddress);
+        
+        if (onChainDecimals !== null) {
+          // We have reliable decimals, try to get symbol/name from APIs
+          let symbol = 'UNKNOWN';
+          let name = 'Unknown Token';
+          
+          for (const source of sources) {
+            try {
+              const metadata = await source.fn();
+              if (metadata && metadata.symbol) {
+                symbol = metadata.symbol;
+                name = metadata.name || symbol;
+                break;
+              }
+            } catch (error) {
+              // Ignore, we already have decimals
+            }
+          }
+          
+          const result = {
+            symbol,
+            name,
+            decimals: onChainDecimals,
+            source: 'onchain'
+          };
+          
+          // Cache and save
+          this.cache.set(tokenAddress, {
+            data: result,
+            timestamp: Date.now()
+          });
+          this.saveCacheToDisk();
+          
+          logger.info(`Fetched metadata with on-chain decimals for ${tokenAddress}:`, result);
+          return result;
+        }
+      } catch (error) {
+        logger.warn(`On-chain fetch failed for ${tokenAddress}:`, error.message);
+      }
+    }
+
+    // Try API sources
     for (const source of sources) {
       try {
         logger.debug(`Trying ${source.name} for token metadata: ${tokenAddress}`);
@@ -273,12 +320,12 @@ class TokenMetadataService {
       }
     }
 
-    // If all sources fail, return default metadata
-    logger.warn(`All metadata sources failed for ${tokenAddress}, using defaults`);
+    // If all sources fail, return default metadata with 6 decimals (Pump.fun standard)
+    logger.warn(`All metadata sources failed for ${tokenAddress}, defaulting to 6 decimals (Pump.fun standard)`);
     const defaultMetadata = {
       symbol: 'UNKNOWN',
       name: 'Unknown Token',
-      decimals: 9, // Most Solana tokens use 9 decimals
+      decimals: 6, // Pump.fun tokens use 6 decimals
       source: 'default'
     };
 
