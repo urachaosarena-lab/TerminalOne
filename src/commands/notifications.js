@@ -50,9 +50,34 @@ module.exports = (bot, notificationService) => {
     
     await ctx.answerCbQuery(prefs.enabled ? 'Notifications disabled' : 'Notifications enabled');
     
-    // Refresh the menu
-    ctx.scene.state = {};
-    return ctx.scene.reenter();
+    // Refresh the menu by re-rendering
+    const updatedPrefs = notificationService.getUserPreferences(userId);
+    const statusIcon = updatedPrefs.enabled ? '🔔' : '🔕';
+    const statusText = updatedPrefs.enabled ? 'Enabled' : 'Disabled';
+    
+    const message = `${statusIcon} *Notification Settings*\\n\\n` +
+      `Status: *${statusText}*\\n` +
+      `Quiet Hours: ${updatedPrefs.quietHours.enabled ? '✅ On' : '❌ Off'}\\n\\n` +
+      `Configure your trading notifications below.`;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback(
+          updatedPrefs.enabled ? '🔕 Disable All' : '🔔 Enable All',
+          'notify_toggle_all'
+        )
+      ],
+      [
+        Markup.button.callback('⚙️ Event Settings', 'notify_events'),
+        Markup.button.callback('🌙 Quiet Hours', 'notify_quiet_hours')
+      ],
+      [Markup.button.callback('🔙 Back to Main', 'back_to_main')]
+    ]);
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      ...keyboard
+    });
   });
   
   /**
@@ -129,8 +154,58 @@ module.exports = (bot, notificationService) => {
       
       await ctx.answerCbQuery();
       
-      // Refresh event settings menu
-      return bot.action('notify_events')(ctx);
+      // Refresh event settings menu by re-rendering
+      const updatedPrefs = notificationService.getUserPreferences(userId);
+      
+      const eventNames = {
+        gridBuy: '🟢 Grid Buys',
+        gridSell: '🔴 Grid Sells',
+        gridComplete: '✅ Grid Complete',
+        gridError: '❌ Grid Errors',
+        martingaleBuy: '🟢 Martingale Buys',
+        martingaleSell: '🔴 Martingale Sells',
+        martingaleComplete: '✅ Martingale Complete',
+        martingaleError: '❌ Martingale Errors',
+        profitTarget: '🎯 Profit Targets',
+        stopLoss: '🛑 Stop Loss',
+        lowBalance: '⚠️ Low Balance'
+      };
+      
+      let message = '⚙️ *Event Notification Settings*\\n\\n';
+      message += 'Toggle individual event notifications:\\n\\n';
+      
+      Object.entries(updatedPrefs.events).forEach(([event, enabled]) => {
+        const icon = enabled ? '✅' : '❌';
+        message += `${icon} ${eventNames[event]}\\n`;
+      });
+      
+      const keyboard = [];
+      
+      // Create rows of 2 buttons each
+      const events = Object.keys(updatedPrefs.events);
+      for (let i = 0; i < events.length; i += 2) {
+        const row = [];
+        
+        for (let j = 0; j < 2 && i + j < events.length; j++) {
+          const event = events[i + j];
+          const enabled = updatedPrefs.events[event];
+          row.push(
+            Markup.button.callback(
+              `${enabled ? '✅' : '❌'} ${eventNames[event].split(' ')[1]}`,
+              `notify_toggle_${event}`
+            )
+          );
+        }
+        
+        keyboard.push(row);
+      }
+      
+      keyboard.push([Markup.button.callback('« Back', 'notifications')]);
+      
+      await ctx.editMessageText(message, {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard(keyboard)
+      });
     });
   });
   
@@ -184,8 +259,33 @@ module.exports = (bot, notificationService) => {
       prefs.quietHours.enabled ? 'Quiet hours disabled' : 'Quiet hours enabled'
     );
     
-    // Refresh quiet hours menu
-    return bot.action('notify_quiet_hours')(ctx);
+    // Refresh quiet hours menu by re-rendering
+    const updatedPrefs = notificationService.getUserPreferences(userId);
+    
+    const message = '🌙 *Quiet Hours Settings*\\n\\n' +
+      `Status: ${updatedPrefs.quietHours.enabled ? '✅ Enabled' : '❌ Disabled'}\\n` +
+      `From: ${updatedPrefs.quietHours.start}\\n` +
+      `To: ${updatedPrefs.quietHours.end}\\n\\n` +
+      `During quiet hours, notifications will be suppressed.`;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback(
+          updatedPrefs.quietHours.enabled ? '❌ Disable' : '✅ Enable',
+          'notify_quiet_toggle'
+        )
+      ],
+      [
+        Markup.button.callback('⏰ Set Start Time', 'notify_quiet_start'),
+        Markup.button.callback('⏰ Set End Time', 'notify_quiet_end')
+      ],
+      [Markup.button.callback('« Back', 'notifications')]
+    ]);
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      ...keyboard
+    });
   });
   
   /**
