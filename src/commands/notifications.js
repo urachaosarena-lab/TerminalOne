@@ -28,7 +28,7 @@ module.exports = (bot, notificationService) => {
         Markup.button.callback('⚙️ Event Settings', 'notify_events'),
         Markup.button.callback('🌙 Quiet Hours', 'notify_quiet_hours')
       ],
-      [Markup.button.callback('« Back to Menu', 'start')]
+      [Markup.button.callback('🔙 Back to Main', 'back_to_main')]
     ]);
     
     await ctx.editMessageText(message, {
