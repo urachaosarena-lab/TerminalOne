@@ -127,7 +127,8 @@ ${balanceInfo.hasWallet ? `\n📍 \`${balanceInfo.publicKey.slice(0,5)}...${bala
       Markup.inlineKeyboard([
         [Markup.button.callback('💰 Wallet', 'wallet'), Markup.button.callback('💻 Active Bots', 'active_bots')],
         [Markup.button.callback('🤖 Initiate Bot', 'strategies_menu'), Markup.button.callback('⚔️ Hero', 'hero_menu')],
-        [Markup.button.callback('📊 Dashboard', 'dashboard'), Markup.button.callback('❓ Help', 'help')]
+        [Markup.button.callback('📊 Dashboard', 'dashboard'), Markup.button.callback('🔔 Notifications', 'notifications')],
+        [Markup.button.callback('❓ Help', 'help')]
       ]) :
       // User has no wallet - show wallet setup
       Markup.inlineKeyboard([

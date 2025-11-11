@@ -3,13 +3,14 @@ const path = require('path');
 const logger = require('../utils/logger');
 
 class MartingaleStrategy {
-  constructor(solanaService, priceService, walletService, tradingService, revenueService, tradingHistoryService = null) {
+  constructor(solanaService, priceService, walletService, tradingService, revenueService, tradingHistoryService = null, notificationService = null) {
     this.solanaService = solanaService;
     this.priceService = priceService;
     this.walletService = walletService;
     this.tradingService = tradingService;
     this.revenueService = revenueService;
     this.tradingHistoryService = tradingHistoryService;
+    this.notificationService = notificationService;
     
     // File persistence
     this.strategiesStoragePath = path.join(__dirname, '../../data/strategies.json');

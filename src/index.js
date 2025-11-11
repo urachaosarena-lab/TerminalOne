@@ -18,6 +18,7 @@ const MonitoringService = require('./services/MonitoringService');
 const { HeroService } = require('./services/HeroService');
 const BattleService = require('./services/BattleService');
 const AnalyticsService = require('./services/AnalyticsService');
+const NotificationService = require('./services/NotificationService');
 const { createHealthCheckServer } = require('./utils/healthCheck');
 const { getBotTitle } = require('./utils/version');
 
@@ -31,10 +32,14 @@ const heroHandlers = require('./commands/hero');
 const battleHandlers = require('./commands/battle');
 const dashboardHandlers = require('./commands/dashboard');
 const activeBotsHandlers = require('./commands/activeBots');
+const notificationHandlers = require('./commands/notifications');
 
 class TerminalOneBot {
   constructor() {
     this.bot = new Telegraf(config.telegram.token);
+    
+    // Initialize notification service first (needs bot instance)
+    this.notificationService = new NotificationService(this.bot);
     
     // Initialize all services
     this.solanaService = new SolanaService();
@@ -60,7 +65,8 @@ class TerminalOneBot {
       this.walletService,
       this.jupiterTradingService, // real trading service
       this.revenueService, // revenue service for fee collection
-      this.tradingHistoryService // trading history service for analytics
+      this.tradingHistoryService, // trading history service for analytics
+      this.notificationService // notification service for alerts
     );
     
     // Grid trading service with metadata support
@@ -68,7 +74,8 @@ class TerminalOneBot {
       this.jupiterTradingService,
       this.enhancedPriceService,
       this.walletService,
-      this.tokenMetadataService
+      this.tokenMetadataService,
+      this.notificationService // notification service for alerts
     );
     
     // RPG Game services
@@ -137,7 +144,8 @@ class TerminalOneBot {
         monitoring: this.monitoringService,
         hero: this.heroService,
         battle: this.battleService,
-        analytics: this.analyticsService
+        analytics: this.analyticsService,
+        notifications: this.notificationService
       };
       return next();
     });
@@ -389,6 +397,9 @@ class TerminalOneBot {
     
     // Active Bots callback
     this.bot.action('active_bots', activeBotsHandlers.handleActiveBots);
+    
+    // Notification callbacks
+    notificationHandlers(this.bot, this.notificationService);
     
     // Placeholder callbacks for future features
     this.bot.action('portfolio', (ctx) => {

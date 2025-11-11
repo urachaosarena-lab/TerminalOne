@@ -3,11 +3,12 @@ const fs = require('fs');
 const path = require('path');
 
 class GridTradingService {
-  constructor(jupiterTradingService, enhancedPriceService, walletService, tokenMetadataService = null) {
+  constructor(jupiterTradingService, enhancedPriceService, walletService, tokenMetadataService = null, notificationService = null) {
     this.jupiterService = jupiterTradingService;
     this.priceService = enhancedPriceService;
     this.walletService = walletService;
     this.tokenMetadataService = tokenMetadataService;
+    this.notificationService = notificationService;
     
     // Active grids: userId -> gridId -> gridState
     this.activeGrids = new Map();
