@@ -121,7 +121,10 @@ ${getBotTitle()}
     }
   }
   
-  await ctx.answerCbQuery();
+  // Only answer callback if this was triggered by a button click
+  if (ctx.callbackQuery) {
+    await ctx.answerCbQuery();
+  }
 }
 
 /**
@@ -167,26 +170,22 @@ ${paramType === 'drop' || paramType === 'leap' ? '• 1% (tight range)\n• 2% (
   try {
     await ctx.editMessageText(message, {
       parse_mode: 'Markdown',
-      ...Markup.inlineKeyboard([
-        [Markup.button.callback('❌ Cancel', 'grid_configure')]
-      ])
+      ...keyboard
     });
-    await ctx.answerCbQuery();
   } catch (error) {
-    if (error.description?.includes('message to edit not found') || error.description?.includes('message is not modified')) {
-      // Message was deleted or unchanged, send new one
+    if (error.description?.includes('message to edit not found')) {
       await ctx.reply(message, {
         parse_mode: 'Markdown',
-        ...Markup.inlineKeyboard([
-          [Markup.button.callback('❌ Cancel', 'grid_configure')]
-        ])
+        ...keyboard
       });
-      await ctx.answerCbQuery();
     } else {
-      logger.error('Error in handleConfigChange:', error);
-      await ctx.answerCbQuery('❌ Error displaying configuration prompt');
-      return;
+      throw error;
     }
+  }
+  
+  // Only answer callback if this was triggered by a button click
+  if (ctx.callbackQuery) {
+    await ctx.answerCbQuery();
   }
   
   // Set awaiting state with parameter type for better handling

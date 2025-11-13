@@ -199,7 +199,7 @@ class GridTradingService {
         throw new Error(`Insufficient balance. Required: ${config.initialAmount} SOL, Available: ${balanceInfo.balance.toFixed(4)} SOL`);
       }
       
-      // 🎯 SOLUTION 1: Pre-fetch and validate token metadata BEFORE attempting buy
+      // Pre-fetch token metadata for correct decimal handling
       logger.info(`🔍 Pre-fetching token metadata for ${tokenAddress}...`);
       let tokenMetadata = { symbol: 'UNKNOWN', name: 'Unknown Token', decimals: 6 }; // Default to pump.fun standard
       if (this.tokenMetadataService) {
@@ -221,31 +221,6 @@ class GridTradingService {
           logger.error(`❌ Failed to fetch token metadata, using pump.fun default (6 decimals):`, e.message);
           // Keep default of 6 decimals for pump.fun tokens
         }
-      }
-      
-      // 🎯 SOLUTION 2: Validate token tradability with Jupiter BEFORE launching grid
-      logger.info(`🔍 Validating token tradability on Jupiter...`);
-      try {
-        const testQuote = await this.jupiterService.getJupiterQuote({
-          inputMint: this.jupiterService.tokenMints.SOL,
-          outputMint: tokenAddress,
-          amount: 1000000, // Test with 0.001 SOL
-          slippageBps: 500 // 5% slippage for test
-        });
-        
-        if (!testQuote || !testQuote.outAmount) {
-          throw new Error('No Jupiter routes available for this token');
-        }
-        
-        logger.info(`✅ Token validation passed - Jupiter route exists`);
-      } catch (error) {
-        const errorMsg = `❌ Cannot trade this token: ${error.message}\n\n` +
-                        `This token may not have:\n` +
-                        `• Sufficient liquidity on DEXs\n` +
-                        `• Active Jupiter swap routes\n` +
-                        `• Proper token account setup\n\n` +
-                        `💡 Try a token with higher liquidity like SOL, BONK, or WIF.`;
-        throw new Error(errorMsg);
       }
       
       // Get current token price
