@@ -199,6 +199,55 @@ class GridTradingService {
         throw new Error(`Insufficient balance. Required: ${config.initialAmount} SOL, Available: ${balanceInfo.balance.toFixed(4)} SOL`);
       }
       
+      // 🎯 SOLUTION 1: Pre-fetch and validate token metadata BEFORE attempting buy
+      logger.info(`🔍 Pre-fetching token metadata for ${tokenAddress}...`);
+      let tokenMetadata = { symbol: 'UNKNOWN', name: 'Unknown Token', decimals: 6 }; // Default to pump.fun standard
+      if (this.tokenMetadataService) {
+        try {
+          tokenMetadata = await this.tokenMetadataService.getTokenMetadata(tokenAddress, this.walletService.solanaService);
+          
+          // Validate decimals are reasonable (0-18)
+          if (tokenMetadata.decimals < 0 || tokenMetadata.decimals > 18) {
+            logger.warn(`⚠️ Invalid decimals ${tokenMetadata.decimals} for ${tokenAddress}, defaulting to 6`);
+            tokenMetadata.decimals = 6;
+          }
+          
+          logger.info(`✅ Token metadata verified:`, {
+            symbol: tokenMetadata.symbol,
+            decimals: tokenMetadata.decimals,
+            source: tokenMetadata.source
+          });
+        } catch (e) {
+          logger.error(`❌ Failed to fetch token metadata, using pump.fun default (6 decimals):`, e.message);
+          // Keep default of 6 decimals for pump.fun tokens
+        }
+      }
+      
+      // 🎯 SOLUTION 2: Validate token tradability with Jupiter BEFORE launching grid
+      logger.info(`🔍 Validating token tradability on Jupiter...`);
+      try {
+        const testQuote = await this.jupiterService.getJupiterQuote({
+          inputMint: this.jupiterService.tokenMints.SOL,
+          outputMint: tokenAddress,
+          amount: 1000000, // Test with 0.001 SOL
+          slippageBps: 500 // 5% slippage for test
+        });
+        
+        if (!testQuote || !testQuote.outAmount) {
+          throw new Error('No Jupiter routes available for this token');
+        }
+        
+        logger.info(`✅ Token validation passed - Jupiter route exists`);
+      } catch (error) {
+        const errorMsg = `❌ Cannot trade this token: ${error.message}\n\n` +
+                        `This token may not have:\n` +
+                        `• Sufficient liquidity on DEXs\n` +
+                        `• Active Jupiter swap routes\n` +
+                        `• Proper token account setup\n\n` +
+                        `💡 Try a token with higher liquidity like SOL, BONK, or WIF.`;
+        throw new Error(errorMsg);
+      }
+      
       // Get current token price
       const priceData = await this.priceService.getTokenPrice(tokenAddress);
       if (!priceData || !priceData.price) {
@@ -211,30 +260,67 @@ class GridTradingService {
       const initialBuyAmount = config.initialAmount / 2;
       logger.info(`Grid: Executing initial buy for ${initialBuyAmount} SOL at price ${entryPrice}`, { userId });
       
-      const buyResult = await this.jupiterService.executeBuy(userId, {
-        tokenAddress,
-        solAmount: initialBuyAmount,
-        maxSlippage: 3
-      });
-      
-      if (!buyResult.success) {
-        throw new Error(`Initial buy failed: ${buyResult.error}`);
+      let buyResult;
+      try {
+        buyResult = await this.jupiterService.executeBuy(userId, {
+          tokenAddress,
+          solAmount: initialBuyAmount,
+          maxSlippage: 3
+        });
+        
+        if (!buyResult.success) {
+          throw new Error(buyResult.error);
+        }
+      } catch (buyError) {
+        // 🎯 SOLUTION 4: Enhanced error classification and user-friendly messages
+        let userFriendlyError = buyError.message;
+        
+        if (buyError.message.includes('No routes found') || buyError.message.includes('Unable to get quote')) {
+          userFriendlyError = `❌ Token cannot be traded on Jupiter\n\n` +
+                             `Possible reasons:\n` +
+                             `• Insufficient liquidity in DEX pools\n` +
+                             `• Token not indexed on Jupiter\n` +
+                             `• Deprecated or broken swap routes\n\n` +
+                             `💡 Try a different token with higher liquidity.`;
+        } else if (buyError.message.includes('InsufficientFunds') || buyError.message.includes('Insufficient balance')) {
+          userFriendlyError = `❌ Insufficient SOL balance\n\n` +
+                             `You need at least ${(config.initialAmount + 0.02).toFixed(4)} SOL to launch this grid:\n` +
+                             `• ${config.initialAmount.toFixed(4)} SOL for trading\n` +
+                             `• 0.02 SOL for transaction fees and rent\n\n` +
+                             `💰 Your current balance: ${balanceInfo.balance.toFixed(4)} SOL`;
+        } else if (buyError.message.includes('Token account not found') || buyError.message.includes('AccountNotFound')) {
+          userFriendlyError = `❌ Token account creation failed\n\n` +
+                             `Ensure you have at least 0.015 SOL extra for:\n` +
+                             `• Token account rent (~0.002 SOL)\n` +
+                             `• Transaction fees\n\n` +
+                             `💡 Add more SOL to your wallet and try again.`;
+        } else if (buyError.message.includes('429') || buyError.message.includes('rate limit')) {
+          userFriendlyError = `❌ Network congestion detected\n\n` +
+                             `The Solana network or Jupiter API is experiencing high traffic.\n\n` +
+                             `⏳ Please wait 30 seconds and try again.`;
+        } else if (buyError.message.includes('timeout')) {
+          userFriendlyError = `❌ Transaction timeout\n\n` +
+                             `The network took too long to respond.\n\n` +
+                             `⏳ Try again in a moment when network is less congested.`;
+        }
+        
+        logger.error('Grid launch failed at initial buy:', {
+          userId,
+          tokenAddress,
+          tokenSymbol: tokenMetadata.symbol,
+          error: buyError.message,
+          userFriendlyError
+        });
+        
+        throw new Error(userFriendlyError);
       }
       
       // Calculate grid levels
       const buyGrids = this.calculateBuyGrids(entryPrice, config);
       const sellGrids = this.calculateSellGrids(entryPrice, config);
       
-      // Fetch token metadata
-      let tokenMetadata = { symbol: 'UNKNOWN', name: 'Unknown Token', decimals: 9 };
-      if (this.tokenMetadataService) {
-        try {
-          tokenMetadata = await this.tokenMetadataService.getTokenMetadata(tokenAddress);
-          logger.info(`Fetched token metadata for grid:`, tokenMetadata);
-        } catch (e) {
-          logger.warn(`Failed to fetch token metadata for ${tokenAddress}:`, e.message);
-        }
-      }
+      // Use pre-fetched token metadata from earlier validation
+      // (already fetched and validated at the start of launchGrid)
       
       // Create grid state
       const gridId = `grid_${userId}_${Date.now()}`;

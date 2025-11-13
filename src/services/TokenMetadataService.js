@@ -31,6 +31,16 @@ class TokenMetadataService {
   }
 
   /**
+   * 🎯 SOLUTION 5: Detect pump.fun tokens by address pattern
+   */
+  isPumpFunToken(tokenAddress) {
+    // Pump.fun tokens typically have 'pump' in the address suffix
+    // or follow specific patterns like ending with 'pump'
+    return tokenAddress.toLowerCase().endsWith('pump') || 
+           tokenAddress.toLowerCase().includes('pump');
+  }
+  
+  /**
    * Load pre-populated decimals database
    */
   loadDecimalsDatabase() {
@@ -320,13 +330,16 @@ class TokenMetadataService {
       }
     }
 
-    // If all sources fail, return default metadata with 6 decimals (Pump.fun standard)
-    logger.warn(`All metadata sources failed for ${tokenAddress}, defaulting to 6 decimals (Pump.fun standard)`);
+    // If all sources fail, return default metadata with smart decimals detection
+    const isPumpToken = this.isPumpFunToken(tokenAddress);
+    const defaultDecimals = isPumpToken ? 6 : 9; // Pump.fun uses 6, standard SPL uses 9
+    
+    logger.warn(`All metadata sources failed for ${tokenAddress}, using ${isPumpToken ? 'Pump.fun' : 'standard SPL'} default (${defaultDecimals} decimals)`);
     const defaultMetadata = {
       symbol: 'UNKNOWN',
       name: 'Unknown Token',
-      decimals: 6, // Pump.fun tokens use 6 decimals
-      source: 'default'
+      decimals: defaultDecimals,
+      source: isPumpToken ? 'pump.fun-detected' : 'default'
     };
 
     // Cache the default to avoid repeated lookups
