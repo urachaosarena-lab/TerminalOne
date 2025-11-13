@@ -132,11 +132,11 @@ async function handleConfigChange(ctx, paramType) {
   const config = ctx.services.grid.getUserConfig(userId);
   
   const paramInfo = {
-    initial: { name: 'Initial Amount', unit: ' SOL', min: 0.04, max: 100, key: 'initialAmount' },
-    buys: { name: 'Buy Orders', unit: '', min: 2, max: 50, key: 'numBuys' },
-    sells: { name: 'Sell Orders', unit: '', min: 2, max: 50, key: 'numSells' },
-    drop: { name: 'Drop %', unit: '%', min: 0.2, max: 33, key: 'dropPercent' },
-    leap: { name: 'Leap %', unit: '%', min: 0.2, max: 100, key: 'leapPercent' }
+    initial: { name: '💰 Initial Amount', unit: ' SOL', min: 0.04, max: 100, key: 'initialAmount', emoji: '💰' },
+    buys: { name: '📉 Buy Orders', unit: '', min: 2, max: 50, key: 'numBuys', emoji: '📉' },
+    sells: { name: '📈 Sell Orders', unit: '', min: 2, max: 50, key: 'numSells', emoji: '📈' },
+    drop: { name: '📊 Drop %', unit: '%', min: 0.2, max: 33, key: 'dropPercent', emoji: '📊' },
+    leap: { name: '🚀 Leap %', unit: '%', min: 0.2, max: 100, key: 'leapPercent', emoji: '🚀' }
   };
   
   const info = paramInfo[paramType];
@@ -147,15 +147,21 @@ async function handleConfigChange(ctx, paramType) {
   
   const currentValue = config[info.key];
   
+  // Enhanced message with better formatting
   const message = `
 ${getBotTitle()}
 
-⚙️ **Configure: ${info.name}**
+⚙️ **Configure ${info.name}**
 
-**Current Value:** ${currentValue}${info.unit}
-**Valid Range:** ${info.min} - ${info.max}${info.unit}
+📊 **Current Value:** ${currentValue}${info.unit}
+📏 **Valid Range:** ${info.min} - ${info.max}${info.unit}
 
-📝 Please send the new value as a number:
+💡 **Examples:**
+${paramType === 'initial' ? '• 0.1 SOL (recommended for testing)\n• 0.5 SOL (regular trading)\n• 1.0 SOL (larger positions)' : ''}
+${paramType === 'buys' || paramType === 'sells' ? '• 5 orders (less frequent trades)\n• 10 orders (balanced)\n• 20 orders (more granular)' : ''}
+${paramType === 'drop' || paramType === 'leap' ? '• 1% (tight range)\n• 2% (recommended)\n• 5% (wider range)' : ''}
+
+📝 **Send the new value:**
   `.trim();
   
   try {
@@ -183,8 +189,10 @@ ${getBotTitle()}
     }
   }
   
-  // Set awaiting state
+  // Set awaiting state with parameter type for better handling
+  ctx.session = ctx.session || {};
   ctx.session.awaitingGridConfig = info.key;
+  ctx.session.gridConfigType = paramType;
 }
 
 /**
@@ -193,66 +201,98 @@ ${getBotTitle()}
 async function handleConfigValueInput(ctx) {
   const userId = ctx.from.id;
   const configKey = ctx.session.awaitingGridConfig;
+  const paramType = ctx.session.gridConfigType;
   
   if (!configKey) return;
   
-  try {
-    // Delete user's message
+  const inputText = ctx.message.text.trim();
+  
+  // Input validation
+  if (!inputText || inputText.length > 20) {
     try {
       await ctx.deleteMessage();
-    } catch (e) {
-      // Ignore delete errors
-    }
+    } catch (e) {}
+    const errorMsg = await ctx.reply('❌ Invalid input. Please enter a valid number.');
+    setTimeout(() => {
+      try {
+        ctx.telegram.deleteMessage(ctx.chat.id, errorMsg.message_id);
+      } catch (e) {}
+    }, 3000);
+    return;
+  }
+  
+  try {
+    // Delete user's message for privacy
+    try {
+      await ctx.deleteMessage();
+    } catch (e) {}
     
-    const value = parseFloat(ctx.message.text);
+    // Show processing message
+    const processingMsg = await ctx.reply('⚙️ **Updating configuration...**', {
+      parse_mode: 'Markdown'
+    });
+    
+    const value = parseFloat(inputText);
     
     if (isNaN(value)) {
-      const errorMsg = await ctx.reply('❌ Invalid number. Please enter a valid number.');
-      // Auto-delete error message after 3 seconds
-      setTimeout(() => {
-        try {
-          ctx.telegram.deleteMessage(ctx.chat.id, errorMsg.message_id);
-        } catch (e) {
-          // Ignore
+      await ctx.telegram.editMessageText(
+        ctx.chat.id,
+        processingMsg.message_id,
+        undefined,
+        `${getBotTitle()}\n\n❌ **Invalid Input**\n\n💬 Please enter a valid number`,
+        {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback('🔄 Try Again', `grid_config_${paramType}`)],
+            [Markup.button.callback('🔙 Back', 'grid_configure')]
+          ])
         }
-      }, 3000);
+      );
       return;
     }
     
+    // Attempt to update configuration
     const result = ctx.services.grid.updateConfig(userId, configKey, value);
     
     if (result.success) {
       delete ctx.session.awaitingGridConfig;
+      delete ctx.session.gridConfigType;
       
-      // Show success notification
-      const successMsg = await ctx.reply(`✅ Updated successfully!`);
+      // Show success message
+      await ctx.telegram.editMessageText(
+        ctx.chat.id,
+        processingMsg.message_id,
+        undefined,
+        `${getBotTitle()}\n\n✅ **Configuration Updated!**\n\n🔄 Returning to configuration menu...`,
+        { parse_mode: 'Markdown' }
+      );
       
-      // Auto-delete success message after 2 seconds
-      setTimeout(() => {
-        try {
-          ctx.telegram.deleteMessage(ctx.chat.id, successMsg.message_id);
-        } catch (e) {
-          // Ignore
-        }
-      }, 2000);
+      // Wait a moment then return to config menu
+      setTimeout(async () => {
+        await handleConfigurationMenu(ctx);
+      }, 1500);
       
-      // Return to config menu
-      await handleConfigurationMenu(ctx);
     } else {
-      const errorMsg = await ctx.reply(`❌ ${result.error}`);
-      // Auto-delete error message after 3 seconds
-      setTimeout(() => {
-        try {
-          ctx.telegram.deleteMessage(ctx.chat.id, errorMsg.message_id);
-        } catch (e) {
-          // Ignore
+      // Show validation error with retry option
+      await ctx.telegram.editMessageText(
+        ctx.chat.id,
+        processingMsg.message_id,
+        undefined,
+        `${getBotTitle()}\n\n❌ **Value Out of Range**\n\n${result.error}\n\n💬 Your input: ${value}`,
+        {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback('🔄 Try Again', `grid_config_${paramType}`)],
+            [Markup.button.callback('🔙 Back', 'grid_configure')]
+          ])
         }
-      }, 3000);
+      );
     }
   } catch (error) {
     logger.error('Config value input error:', error);
     await ctx.reply('❌ Error updating configuration. Please try again.');
     delete ctx.session.awaitingGridConfig;
+    delete ctx.session.gridConfigType;
   }
 }
 
