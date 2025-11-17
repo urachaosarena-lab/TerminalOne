@@ -152,7 +152,10 @@ class RealtimePriceService {
             address: tokenAddress,
             include_liquidity: true 
           },
-          timeout: 3000
+          timeout: 3000,
+          headers: {
+            ...(process.env.BIRDEYE_API_KEY ? { 'X-API-KEY': process.env.BIRDEYE_API_KEY } : {})
+          }
         });
 
         if (response.data.success) {

@@ -15,7 +15,8 @@ class JupiterTradingService {
     // Request throttling to prevent rate limits
     this.requestQueue = [];
     this.isProcessingQueue = false;
-    this.minRequestInterval = 1000; // 1 second between Jupiter API requests
+    // Allow override via env var (e.g., 1500ms) to ease 429s
+    this.minRequestInterval = parseInt(process.env.JUPITER_MIN_REQUEST_INTERVAL_MS || '1000', 10);
     this.lastRequestTime = 0;
     
     // Jupiter API endpoints with fallback
@@ -66,18 +67,43 @@ class JupiterTradingService {
    * Throttle API requests to prevent rate limiting
    */
   async throttledRequest(requestFn) {
-    const now = Date.now();
-    const timeSinceLastRequest = now - this.lastRequestTime;
-    
-    // Wait if we're making requests too quickly
-    if (timeSinceLastRequest < this.minRequestInterval) {
-      const waitTime = this.minRequestInterval - timeSinceLastRequest;
-      logger.debug(`Throttling request: waiting ${waitTime}ms`);
-      await this.sleep(waitTime);
+    return new Promise((resolve, reject) => {
+      this.requestQueue.push({ requestFn, resolve, reject });
+      if (!this.isProcessingQueue) {
+        this.processRequestQueue().catch(err => {
+          logger.error('Failed to process Jupiter request queue:', err?.message || err);
+        });
+      }
+    });
+  }
+
+  /**
+   * Internal: process the queued Jupiter requests sequentially with spacing
+   */
+  async processRequestQueue() {
+    this.isProcessingQueue = true;
+    try {
+      while (this.requestQueue.length > 0) {
+        const { requestFn, resolve, reject } = this.requestQueue.shift();
+        const now = Date.now();
+        const timeSinceLastRequest = now - this.lastRequestTime;
+        if (timeSinceLastRequest < this.minRequestInterval) {
+          const waitTime = this.minRequestInterval - timeSinceLastRequest;
+          logger.debug(`Throttling Jupiter request: waiting ${waitTime}ms`);
+          await this.sleep(waitTime);
+        }
+
+        try {
+          this.lastRequestTime = Date.now();
+          const result = await requestFn();
+          resolve(result);
+        } catch (err) {
+          reject(err);
+        }
+      }
+    } finally {
+      this.isProcessingQueue = false;
     }
-    
-    this.lastRequestTime = Date.now();
-    return await requestFn();
   }
 
   /**
@@ -355,7 +381,7 @@ class JupiterTradingService {
         }
         
         // Get current SOL/USD price for accurate price calculation
-        const solPriceUSD = 200; // Fallback, should fetch from price service
+        let solPriceUSD = 200; // Fallback, should fetch from price service
         try {
           const solPriceData = await require('./EnhancedPriceService').prototype.getSolanaPrice.call({ cache: new Map() });
           if (solPriceData && solPriceData.price) {
@@ -565,7 +591,7 @@ class JupiterTradingService {
             primaryStatus: primaryError.response?.status,
             fallbackStatus: fallbackError.response?.status
           });
-          return null;
+          throw new Error(`Jupiter quote endpoints failed (primary: ${primaryError.response?.status || primaryError.message}, fallback: ${fallbackError.response?.status || fallbackError.message})`);
         }
       }
     });
@@ -623,7 +649,7 @@ class JupiterTradingService {
             fallbackStatus: fallbackError.response?.status,
             fallbackData: fallbackError.response?.data
           });
-          return null;
+          throw new Error(`Jupiter swap endpoints failed (primary: ${primaryError.response?.status || primaryError.message}, fallback: ${fallbackError.response?.status || fallbackError.message})`);
         }
       }
     });

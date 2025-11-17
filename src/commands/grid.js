@@ -1,6 +1,7 @@
 const { Markup } = require('telegraf');
 const { getBotTitle } = require('../utils/version');
 const logger = require('../utils/logger');
+const { formatSOL, formatPercent } = require('../utils/uiHelpers');
 
 /**
  * Grid Trading Menu
@@ -19,7 +20,7 @@ async function handleGridMenu(ctx) {
   let balanceText = '';
   if (walletService) {
     const balance = await walletService.getWalletBalance(userId);
-    balanceText = balance.hasWallet ? `💰 **Balance:** ${balance.balance.toFixed(4)} SOL` : '💰 **No Wallet Connected**';
+    balanceText = balance.hasWallet ? `💰 **Balance:** ${formatSOL(balance.balance).replace(' SOL', '')} SOL` : '💰 **No Wallet Connected**';
   }
 
   // Get user's active grids
@@ -37,22 +38,18 @@ ${getBotTitle()}
 ${balanceText}
 
 📊 **Current Configuration:**
-💰 Initial Amount: **${config.initialAmount} SOL**
-📉 Buy Orders: **${config.numBuys}** (${config.dropPercent}% apart)
-📈 Sell Orders: **${config.numSells}** (${config.leapPercent}% apart)
+💰 Initial: **${config.initialAmount} SOL** | 📉 Buys: **${config.numBuys}** (${config.dropPercent}%)
+📈 Sells: **${config.numSells}** (${config.leapPercent}%) | 📎 Max Risk: **${formatSOL(config.initialAmount).replace(' SOL', '')} SOL**
 
-📊 Max Drop: **${(config.dropPercent * config.numBuys).toFixed(1)}%**
-🚀 Max Leap: **${(config.leapPercent * config.numSells).toFixed(1)}%**
-📈 **Active Grids:** ${activeCount}
+📈 **Active Grids:** **${activeCount}**
 
 🚀 Ready to profit from volatility?
   `.trim();
   
   const keyboard = Markup.inlineKeyboard([
-    [Markup.button.callback('⚙️ Configure Strategy', 'grid_configure')],
-    [Markup.button.callback('🔍 Search Token & Launch', 'grid_launch')],
+    [Markup.button.callback('⚙️ Configure', 'grid_configure'), Markup.button.callback('🚀 Launch', 'grid_launch')],
     [Markup.button.callback('📊 Active Grids', 'grid_active')],
-    [Markup.button.callback('🤖 Back to Strategies', 'strategies_menu'), Markup.button.callback('🔙 Main Menu', 'back_to_main')]
+    [Markup.button.callback('🔙 Back', 'strategies_menu'), Markup.button.callback('🏠 Main Menu', 'back_to_main')]
   ]);
   
   if (ctx.callbackQuery) {
@@ -76,32 +73,40 @@ async function handleConfigurationMenu(ctx) {
   const userId = ctx.from.id;
   const config = ctx.services.grid.getUserConfig(userId);
   
+  const walletService = ctx.services?.wallet;
+  let balanceText = '0.0000';
+  if (walletService) {
+    const balance = await walletService.getWalletBalance(userId);
+    balanceText = balance.hasWallet ? balance.balance.toFixed(4) : '0.0000';
+  }
+  
   const message = `
 ${getBotTitle()}
 
-⚙️ **Grid Trading Configuration**
+⚙️ **Grid Configuration**
+
+💰 **Balance:** ${balanceText} SOL
 
 🔧 **Current Settings:**
-💰 **Initial Amount:** ${config.initialAmount} SOL
-📉 **Buy Orders:** ${config.numBuys}
-📈 **Sell Orders:** ${config.numSells}
-📊 **Drop %:** ${config.dropPercent}%
-🚀 **Leap %:** ${config.leapPercent}%
+💰 **Initial:** ${config.initialAmount} SOL
+📉 **Buys:** ${config.numBuys}
+📈 **Sells:** ${config.numSells}
+📊 **Drop:** ${config.dropPercent}%
+🚀 **Leap:** ${config.leapPercent}%
 
 📊 **Grid Coverage:**
 📉 Max Drop: **${(config.dropPercent * config.numBuys).toFixed(1)}%**
 📈 Max Leap: **${(config.leapPercent * config.numSells).toFixed(1)}%**
 
-💰 **Investment:** ${config.initialAmount.toFixed(4)} SOL (${(config.initialAmount / 2).toFixed(4)} SOL initial buy + ${(config.initialAmount / 2).toFixed(4)} SOL for buys)
+💎 **Total Investment:** **${formatSOL(config.initialAmount).replace(' SOL', '')} SOL**
 
-⚠️ This is the total SOL reserved for grid trading.
+⚠️ Total SOL reserved for grid trading.
   `.trim();
   
   const keyboard = Markup.inlineKeyboard([
-    [Markup.button.callback('💰 Initial Amount', 'grid_config_initial'), Markup.button.callback('📉 Buy Orders', 'grid_config_buys')],
-    [Markup.button.callback('📈 Sell Orders', 'grid_config_sells'), Markup.button.callback('📊 Drop %', 'grid_config_drop')],
-    [Markup.button.callback('🚀 Leap %', 'grid_config_leap')],
-    [Markup.button.callback('🔄 Reset to Defaults', 'grid_config_reset')],
+    [Markup.button.callback('💰 Initial', 'grid_config_initial'), Markup.button.callback('📉 Buys', 'grid_config_buys')],
+    [Markup.button.callback('📈 Sells', 'grid_config_sells'), Markup.button.callback('📊 Drop %', 'grid_config_drop')],
+    [Markup.button.callback('🚀 Leap %', 'grid_config_leap'), Markup.button.callback('🔄 Reset', 'grid_config_reset')],
     [Markup.button.callback('🔙 Back', 'grid_menu')]
   ]);
 

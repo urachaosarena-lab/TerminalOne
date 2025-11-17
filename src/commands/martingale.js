@@ -1,6 +1,7 @@
 const { Markup } = require('telegraf');
 const logger = require('../utils/logger');
 const { getBotTitle } = require('../utils/version');
+const { formatSOL, formatPercent, formatCompactConfig } = require('../utils/uiHelpers');
 
 // Default configuration
 const CONFIG_LIMITS = {
@@ -63,7 +64,7 @@ const handleMartingaleMenu = async (ctx) => {
   let balanceText = '';
   if (walletService) {
     const balance = await walletService.getWalletBalance(userId);
-    balanceText = balance.hasWallet ? `💰 **Balance:** ${balance.balance.toFixed(4)} SOL` : '💰 **No Wallet Connected**';
+    balanceText = balance.hasWallet ? `💰 **Balance:** ${formatSOL(balance.balance).replace(' SOL', '')} SOL` : '💰 **No Wallet Connected**';
   }
 
   // Get user's active strategies
@@ -72,6 +73,7 @@ const handleMartingaleMenu = async (ctx) => {
   
   // Get user's current configuration
   const userConfig = getUserConfig(ctx, userId);
+  const maxInvestment = calculateMaxInvestment(userConfig);
   
   const message = `
 ${getBotTitle()}
@@ -81,24 +83,20 @@ ${getBotTitle()}
 ${balanceText}
 
 📊 **Current Configuration:**
-💰 Initial Buy: **${userConfig.initialBuyAmount} SOL**
-📉 Drop Trigger: **${userConfig.dropPercentage}%**
-⚡ Multiplier: **${userConfig.multiplier}x**
-🔢 Max Levels: **${userConfig.maxLevels}**
-🎯 Profit Target: **${userConfig.profitTarget}%**
-🛑 Stop Loss: **${userConfig.stopLoss === 0 ? 'OFF' : userConfig.stopLoss + '%'}**
+💰 Initial: **${userConfig.initialBuyAmount} SOL** | 📉 Drop: **${userConfig.dropPercentage}%**
+⚡ Multiplier: **${userConfig.multiplier}x** | 🔢 Levels: **${userConfig.maxLevels}**
+🎯 Profit: **${userConfig.profitTarget}%** | 📎 Max Risk: **${formatSOL(maxInvestment).replace(' SOL', '')} SOL**
 
-📎 Max Investment: **${calculateMaxInvestment(userConfig).toFixed(4)} SOL**
-📈 **Active Strategies:** ${activeCount}
+📈 **Active Strategies:** **${activeCount}**
 
 🚀 Ready to dominate the markets?
   `;
 
   const keyboard = Markup.inlineKeyboard([
-    [Markup.button.callback('⚙️ Configure Strategy', 'martingale_configure')],
-    [Markup.button.callback('🔍 Search Token & Launch', 'martingale_launch')],
-    [Markup.button.callback('📊 Active Strategies', 'martingale_active'), Markup.button.callback('📈 History', 'martingale_history')],
-    [Markup.button.callback('🤖 Back to Strategies', 'strategies_menu'), Markup.button.callback('🔙 Main Menu', 'back_to_main')]
+    [Markup.button.callback('⚙️ Configure', 'martingale_configure'), Markup.button.callback('🚀 Launch', 'martingale_launch')],
+    [Markup.button.callback('📊 Active Strategies', 'martingale_active')],
+    [Markup.button.callback('📈 History', 'martingale_history')],
+    [Markup.button.callback('🔙 Back', 'strategies_menu'), Markup.button.callback('🏠 Main Menu', 'back_to_main')]
   ]);
 
   if (ctx.callbackQuery) {
@@ -127,33 +125,33 @@ const handleConfigurationMenu = async (ctx) => {
   const message = `
 ${getBotTitle()}
 
-⚙️ **Martingale Bot Configuration**
+⚙️ **Martingale Configuration**
+
+💰 **Balance:** ${ctx.services?.wallet ? (await ctx.services.wallet.getWalletBalance(userId)).balance.toFixed(4) : '0.0000'} SOL
 
 🔧 **Current Settings:**
-💰 **Initial Buy Amount:** ${userConfig.initialBuyAmount} SOL
-📉 **Drop Percentage:** ${userConfig.dropPercentage}%
+💰 **Initial Buy:** ${userConfig.initialBuyAmount} SOL
+📉 **Drop:** ${userConfig.dropPercentage}%
 ⚡ **Multiplier:** ${userConfig.multiplier}x
-🔢 **Max Levels:** ${userConfig.maxLevels}
-🎯 **Profit Target:** ${userConfig.profitTarget}%
+🔢 **Levels:** ${userConfig.maxLevels}
+🎯 **Profit:** ${userConfig.profitTarget}%
 🌊 **Slippage:** ${userConfig.slippage}%
 🛑 **Stop Loss:** ${userConfig.stopLoss === 0 ? 'OFF' : userConfig.stopLoss + '%'}
-📉 **Max Drop:** ${maxDrop}%
 
 📊 **Investment Breakdown:**
 ${generateInvestmentBreakdown(userConfig)}
 
-💎 **Total Max Investment:** **${maxInvestment.toFixed(4)} SOL**
+💎 **Total Max Investment:** **${formatSOL(maxInvestment).replace(' SOL', '')} SOL**
 
-⚠️ This is the maximum SOL you could lose if strategy reaches all levels.
+⚠️ Maximum SOL at risk if all levels reached.
   `;
 
   const keyboard = Markup.inlineKeyboard([
     [Markup.button.callback('🎯 Degen', 'preset_degen'), Markup.button.callback('⚡ Regular', 'preset_regular'), Markup.button.callback('🛡️ Stable', 'preset_stable')],
-    [Markup.button.callback('💰 Initial Amount', 'config_initial'), Markup.button.callback('📉 Drop %', 'config_drop')],
-    [Markup.button.callback('⚡ Multiplier', 'config_multiplier'), Markup.button.callback('🔢 Max Levels', 'config_levels')],
-    [Markup.button.callback('🎯 Profit Target', 'config_profit'), Markup.button.callback('🌊 Slippage', 'config_slippage')],
-    [Markup.button.callback('🛑 Stop Loss', 'config_stoploss')],
-    [Markup.button.callback('🔄 Reset to Defaults', 'config_reset')],
+    [Markup.button.callback('💰 Initial', 'config_initial'), Markup.button.callback('📉 Drop %', 'config_drop')],
+    [Markup.button.callback('⚡ Multiplier', 'config_multiplier'), Markup.button.callback('🔢 Levels', 'config_levels')],
+    [Markup.button.callback('🎯 Profit', 'config_profit'), Markup.button.callback('🌊 Slippage', 'config_slippage')],
+    [Markup.button.callback('🛑 Stop Loss', 'config_stoploss'), Markup.button.callback('🔄 Reset', 'config_reset')],
     [Markup.button.callback('🔙 Back', 'martingale_menu')]
   ]);
 

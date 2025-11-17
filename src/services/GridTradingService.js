@@ -223,6 +223,30 @@ class GridTradingService {
         }
       }
       
+      // Optional lightweight liquidity validation (non-blocking)
+      try {
+        const validationMode = (process.env.JUPITER_LIGHT_VALIDATION || '').toLowerCase();
+        if (validationMode === 'warn') {
+          const testAmount = Math.max((this.getUserConfig(userId)?.initialAmount || 0.1) / 10, 0.01);
+          const liq = await this.jupiterService.checkLiquidity(tokenAddress, testAmount);
+          if (!liq?.hasLiquidity) {
+            logger.warn(`Pre-launch liquidity check WARN-only: ${liq?.reason || 'unknown reason'}`, {
+              userId,
+              tokenAddress,
+              testAmount
+            });
+          } else {
+            logger.info(`Pre-launch liquidity check passed`, {
+              userId,
+              tokenAddress,
+              priceImpact: liq.priceImpact
+            });
+          }
+        }
+      } catch (vErr) {
+        logger.warn(`Optional liquidity validation encountered an error (ignored): ${vErr.message}`);
+      }
+      
       // Get current token price
       const priceData = await this.priceService.getTokenPrice(tokenAddress);
       if (!priceData || !priceData.price) {
