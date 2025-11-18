@@ -1,6 +1,7 @@
 const { Markup } = require('telegraf');
 const { getBotTitle } = require('../utils/version');
 const logger = require('../utils/logger');
+const { formatSOL, formatPnL } = require('../utils/uiHelpers');
 
 /**
  * Handle Active Bots Panel - Unified view of all active strategies
@@ -83,8 +84,6 @@ async function handleActiveBots(ctx) {
     // Calculate totals
     const totalActive = martingaleActive + gridActive;
     const totalPnL = martingalePnL + gridPnL;
-    const pnlEmoji = totalPnL >= 0 ? '🟢' : '🔴';
-    const pnlSign = totalPnL >= 0 ? '+' : '';
     
     // Build message
     let message = `${getBotTitle()}\n\n💻 **Active Bots Overview**\n\n`;
@@ -92,23 +91,19 @@ async function handleActiveBots(ctx) {
     if (totalActive === 0) {
       message += `📊 **No Active Bots**\n\nYou don't have any active trading strategies running.\n\n🚀 Launch a strategy to start automated trading!`;
     } else {
-      message += `📊 **Total Active:** ${totalActive} bot${totalActive !== 1 ? 's' : ''}\n`;
-      message += `${pnlEmoji} **Total P&L:** ${pnlSign}${totalPnL.toFixed(4)} SOL\n\n`;
+      message += `📊 **Total Active:** **${totalActive}** bot${totalActive !== 1 ? 's' : ''}\n`;
+      message += `${formatPnL(totalPnL)}\n\n`;
       
       // Martingale section
       if (martingaleActive > 0) {
-        const martingalePnLEmoji = martingalePnL >= 0 ? '🟢' : '🔴';
-        const martingalePnLSign = martingalePnL >= 0 ? '+' : '';
-        
         message += `🤖 **Martingale Bots**\n`;
         message += `• Active: **${martingaleActive}**\n`;
-        message += `• P&L: ${martingalePnLEmoji} **${martingalePnLSign}${martingalePnL.toFixed(4)} SOL**\n`;
+        message += `• P&L: ${formatPnL(martingalePnL)}\n`;
         
         // Show brief info about each strategy
         martingaleStrategies.slice(0, 3).forEach((strategy, index) => {
           const symbol = strategy.symbol || 'Unknown';
-          const invested = strategy.totalInvested.toFixed(4);
-          message += `  ${index + 1}. ${symbol} - ${invested} SOL invested\n`;
+          message += `  ${index + 1}. ${symbol} - ${formatSOL(strategy.totalInvested).replace(' SOL', '')} SOL\n`;
         });
         
         if (martingaleActive > 3) {
@@ -120,18 +115,14 @@ async function handleActiveBots(ctx) {
       
       // Grid section
       if (gridActive > 0) {
-        const gridPnLEmoji = gridPnL >= 0 ? '🟢' : '🔴';
-        const gridPnLSign = gridPnL >= 0 ? '+' : '';
-        
         message += `🕸️ **Grid Trading Bots**\n`;
         message += `• Active: **${gridActive}**\n`;
-        message += `• P&L: ${gridPnLEmoji} **${gridPnLSign}${gridPnL.toFixed(4)} SOL**\n`;
+        message += `• P&L: ${formatPnL(gridPnL)}\n`;
         
         // Show brief info about each grid
         gridStrategies.slice(0, 3).forEach((grid, index) => {
           const symbol = grid.tokenSymbol || 'Unknown';
-          const invested = grid.initialAmount.toFixed(4);
-          message += `  ${index + 1}. ${symbol} - ${invested} SOL invested\n`;
+          message += `  ${index + 1}. ${symbol} - ${formatSOL(grid.initialAmount).replace(' SOL', '')} SOL\n`;
         });
         
         if (gridActive > 3) {
@@ -156,9 +147,8 @@ async function handleActiveBots(ctx) {
     }
     
     buttons.push(
-      [Markup.button.callback('🤖 Launch Martingale', 'martingale_menu'), Markup.button.callback('🕸️ Launch Grid', 'grid_menu')],
-      [Markup.button.callback('🔄 Refresh', 'active_bots')],
-      [Markup.button.callback('🔙 Main Menu', 'back_to_main')]
+      [Markup.button.callback('🤖 Martingale', 'martingale_menu'), Markup.button.callback('🕸️ Grid', 'grid_menu')],
+      [Markup.button.callback('🔄 Refresh', 'active_bots'), Markup.button.callback('🔙 Main Menu', 'back_to_main')]
     );
     
     const keyboard = Markup.inlineKeyboard(buttons);

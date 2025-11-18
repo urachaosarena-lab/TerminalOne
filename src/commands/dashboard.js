@@ -1,5 +1,6 @@
 const { Markup } = require('telegraf');
 const { getBotTitle } = require('../utils/version');
+const { formatSOL } = require('../utils/uiHelpers');
 
 /**
  * Handle dashboard view
@@ -22,29 +23,26 @@ ${getBotTitle()}
 📊 **Platform Dashboard**
 
 👥 **User Engagement**
-• Active Users (7d): **${data.userEngagement.activeUsers7d}**
-• Active Users (30d): **${data.userEngagement.activeUsers30d}**
-• New Users (7d): **${data.userEngagement.newUsers7d}**
-• New Users (30d): **${data.userEngagement.newUsers30d}**
+• Active (7d): **${data.userEngagement.activeUsers7d}** | New (7d): **${data.userEngagement.newUsers7d}**
+• Active (30d): **${data.userEngagement.activeUsers30d}** | New (30d): **${data.userEngagement.newUsers30d}**
 
 🤖 **Trading Activity**
 • Total Strategies: **${data.tradingActivity.totalStrategiesLaunched}**
 • Active Strategies: **${data.tradingActivity.activeStrategies}**
-• Total Volume: **${data.tradingActivity.totalVolume.toFixed(4)} SOL**
+• Total Volume: **${formatSOL(data.tradingActivity.totalVolume).replace(' SOL', '')} SOL**
 
 ⚔️ **Battle Activity**
 • Total PvE Battles: **${data.battleActivity.totalBattles}**
 
 💰 **Revenue**
-• Platform Fees (7d): **${data.revenue.fees7d.toFixed(4)} SOL**
-• Platform Fees (30d): **${data.revenue.fees30d.toFixed(4)} SOL**
+• 7d Fees: **${formatSOL(data.revenue.fees7d).replace(' SOL', '')} SOL**
+• 30d Fees: **${formatSOL(data.revenue.fees30d).replace(' SOL', '')} SOL**
 
-🔄 **Last Updated:** ${new Date(data.generatedAt).toLocaleString()}
+🔄 **Updated:** ${new Date(data.generatedAt).toLocaleString()}
     `;
     
     const keyboard = Markup.inlineKeyboard([
-      [Markup.button.callback('🔄 Refresh', 'dashboard')],
-      [Markup.button.callback('🔙 Main Menu', 'back_to_main')]
+      [Markup.button.callback('🔄 Refresh', 'dashboard'), Markup.button.callback('🔙 Main Menu', 'back_to_main')]
     ]);
     
     if (ctx.callbackQuery) {

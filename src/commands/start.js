@@ -1,5 +1,6 @@
 const { Markup } = require('telegraf');
 const { getBotTitle } = require('../utils/version');
+const { formatSOL, formatAddress, formatActiveBotsLine } = require('../utils/uiHelpers');
 
 module.exports = async (ctx) => {
   // Get services from context
@@ -17,7 +18,7 @@ module.exports = async (ctx) => {
     // Get wallet balance
     const balanceInfo = await walletService.getWalletBalance(userId);
     const balanceText = balanceInfo.hasWallet ? 
-      `💰 **${balanceInfo.balance.toFixed(4)} SOL**` : 
+      `💰 **${formatSOL(balanceInfo.balance).replace(' SOL', '')} SOL**` : 
       '💰 **No Wallet Connected**';
     
     // Get ALL active bots info (Martingale + Grid)
@@ -86,13 +87,7 @@ module.exports = async (ctx) => {
       }
       
       // Format active bots display
-      if (totalActiveBots > 0 && hasAnyPnL) {
-        const pnlEmoji = totalPnL >= 0 ? '🟢' : '🔴';
-        const sign = totalPnL >= 0 ? '+' : '';
-        activeBotsText = `\n💻 **Active Bots:** ${totalActiveBots} | ${pnlEmoji} ${sign}${totalPnL.toFixed(4)} SOL`;
-      } else {
-        activeBotsText = `\n💻 **Active Bots:** ${totalActiveBots}`;
-      }
+      activeBotsText = `\n${formatActiveBotsLine(totalActiveBots, hasAnyPnL ? totalPnL : null)}`;
     }
 
     // Get Hero stats
@@ -119,7 +114,7 @@ ${getBotTitle()}
 ${priceInfo}
 
 ${balanceText}
-${balanceInfo.hasWallet ? `\n📍 \`${balanceInfo.publicKey.slice(0,5)}...${balanceInfo.publicKey.slice(-5)}\`` : ''}${activeBotsText}${heroStatsText}
+${balanceInfo.hasWallet ? `\n📍 ${formatAddress(balanceInfo.publicKey)}` : ''}${activeBotsText}${heroStatsText}
     `;
 
     const keyboard = balanceInfo.hasWallet ? 
@@ -132,8 +127,7 @@ ${balanceInfo.hasWallet ? `\n📍 \`${balanceInfo.publicKey.slice(0,5)}...${bala
       ]) :
       // User has no wallet - show wallet setup
       Markup.inlineKeyboard([
-        [Markup.button.callback('🆕 Create Wallet', 'create_wallet')],
-        [Markup.button.callback('📥 Import Wallet', 'import_wallet')],
+        [Markup.button.callback('🆕 Create Wallet', 'create_wallet'), Markup.button.callback('📥 Import Wallet', 'import_wallet')],
         [Markup.button.callback('📊 Dashboard', 'dashboard')],
         [Markup.button.callback('❓ Help', 'help')]
       ]);
@@ -158,8 +152,7 @@ ${getBotTitle()}
     `;
 
     const fallbackKeyboard = Markup.inlineKeyboard([
-      [Markup.button.callback('🆕 Create Wallet', 'create_wallet')],
-      [Markup.button.callback('📥 Import Wallet', 'import_wallet')],
+      [Markup.button.callback('🆕 Create Wallet', 'create_wallet'), Markup.button.callback('📥 Import Wallet', 'import_wallet')],
       [Markup.button.callback('❓ Help', 'help')]
     ]);
 
