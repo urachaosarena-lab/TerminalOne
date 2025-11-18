@@ -4,15 +4,18 @@ const logger = require('../utils/logger');
 class EnhancedPriceService {
   constructor() {
     this.cache = new Map();
-    this.cacheTimeout = 30000; // 30 seconds cache for token prices
-    this.solCacheTimeout = 60000; // 1 minute cache for SOL price
+    this.cacheTimeout = 60000; // 60 seconds cache for token prices (increased from 30s)
+    this.solCacheTimeout = 120000; // 2 minutes cache for SOL price (increased from 1min)
+    this.staleTimeout = 300000; // 5 minutes - max age before warning about stale data
+    this.maxRetries = 2; // Maximum retry attempts per source
     
     // Well-known token addresses on Solana
     this.knownTokens = {
       'SOL': 'So11111111111111111111111111111111111111112',
       'USDC': 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
       'USDT': 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
-      // Add more as needed
+      'BONK': 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263',
+      'JUP': 'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN'
     };
   }
 
@@ -224,7 +227,21 @@ class EnhancedPriceService {
   }
 
   /**
-   * Smart token price fetching (tries multiple sources with unified cache)
+   * Retry helper with exponential backoff
+   */
+  async retryWithBackoff(fn, retries = this.maxRetries, delay = 1000) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (retries <= 0) throw error;
+      logger.debug(`Retrying after ${delay}ms... (${retries} attempts left)`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return this.retryWithBackoff(fn, retries - 1, delay * 2);
+    }
+  }
+
+  /**
+   * Smart token price fetching (tries multiple sources with unified cache and retry logic)
    */
   async getTokenPrice(tokenAddress) {
     // Handle SOL specifically
@@ -236,29 +253,36 @@ class EnhancedPriceService {
     const cacheKey = `price-${tokenAddress}`;
     const cached = this.cache.get(cacheKey);
     
+    // Return fresh cached data
     if (cached && Date.now() - cached.timestamp < this.cacheTimeout) {
-      logger.debug(`Using cached price for ${tokenAddress} from ${cached.data.source}`);
+      logger.debug(`Using fresh cached price for ${tokenAddress} from ${cached.data.source}`);
       return cached.data;
     }
 
-    // Try sources in order of reliability: DexScreener -> CoinGecko -> Jupiter
+    // Warn about stale data but still usable
+    if (cached && Date.now() - cached.timestamp < this.staleTimeout) {
+      logger.debug(`Cache is stale but recent for ${tokenAddress}, will try to refresh`);
+    }
+
+    // Try sources in order of reliability: DexScreener -> Jupiter -> CoinGecko
     const sources = [
       { name: 'DexScreener', fn: () => this.getTokenPriceFromDexScreener(tokenAddress) },
-      { name: 'CoinGecko', fn: () => this.getTokenPriceFromCoinGecko(tokenAddress) },
-      { name: 'Jupiter', fn: () => this.getTokenPriceFromJupiter(tokenAddress) }
+      { name: 'Jupiter', fn: () => this.getTokenPriceFromJupiter(tokenAddress) },
+      { name: 'CoinGecko', fn: () => this.getTokenPriceFromCoinGecko(tokenAddress) }
     ];
 
     for (const source of sources) {
       try {
         logger.info(`Trying ${source.name} for token ${tokenAddress}`);
-        const result = await source.fn();
-        if (result.price > 0) {
+        // Use retry logic for each source
+        const result = await this.retryWithBackoff(source.fn, this.maxRetries, 500);
+        if (result && result.price > 0) {
           // Cache the successful result with unified key
           this.cache.set(cacheKey, {
             data: result,
             timestamp: Date.now()
           });
-          logger.info(`Successfully fetched and cached price from ${source.name}`);
+          logger.info(`Successfully fetched and cached price from ${source.name}: $${result.price}`);
           return result;
         }
       } catch (error) {
@@ -269,8 +293,14 @@ class EnhancedPriceService {
 
     // If all sources fail, check if we have ANY cached data (even expired)
     if (cached) {
-      logger.warn(`All sources failed, using expired cache for ${tokenAddress}`);
-      return cached.data;
+      const age = Math.floor((Date.now() - cached.timestamp) / 1000);
+      logger.warn(`All sources failed, using ${age}s old cache for ${tokenAddress}`);
+      // Mark data as stale
+      return {
+        ...cached.data,
+        stale: true,
+        age: age
+      };
     }
 
     // If all sources fail and no cache, return fallback data
@@ -281,7 +311,8 @@ class EnhancedPriceService {
       change1h: 0,
       timestamp: Date.now(),
       source: 'error',
-      address: tokenAddress
+      address: tokenAddress,
+      error: true
     };
   }
 
