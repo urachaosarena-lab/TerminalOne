@@ -264,6 +264,16 @@ class TerminalOneBot {
     this.bot.action('history_analytics', martingaleHandlers.handleDetailedAnalytics);
     this.bot.action('history_export', martingaleHandlers.handleExportReport);
     
+    // Quick-access token buttons for Martingale
+    this.bot.action(/martingale_quick_(.+)/, async (ctx) => {
+      const tokenAddress = ctx.match[1];
+      // Simulate token analysis by creating a fake message with the token address
+      ctx.session = ctx.session || {};
+      ctx.session.awaitingToken = true;
+      ctx.message = { text: tokenAddress };
+      await martingaleHandlers.handleTokenAnalysis(ctx);
+    });
+    
     // Grid trading callbacks
     this.bot.action('grid_menu', gridHandlers.handleGridMenu);
     this.bot.action('grid_configure', gridHandlers.handleConfigurationMenu);
@@ -281,6 +291,16 @@ class TerminalOneBot {
     this.bot.action('grid_config_drop', (ctx) => gridHandlers.handleConfigChange(ctx, 'drop'));
     this.bot.action('grid_config_leap', (ctx) => gridHandlers.handleConfigChange(ctx, 'leap'));
     this.bot.action('grid_config_reset', gridHandlers.handleResetConfig);
+    
+    // Quick-access token buttons for Grid
+    this.bot.action(/grid_quick_(.+)/, async (ctx) => {
+      const tokenAddress = ctx.match[1];
+      // Simulate token analysis by creating a fake message with the token address
+      ctx.session = ctx.session || {};
+      ctx.session.awaitingGridToken = true;
+      ctx.message = { text: tokenAddress };
+      await gridHandlers.handleTokenAnalysis(ctx);
+    });
     
     // Hero/RPG callbacks
     this.bot.action('hero_menu', heroHandlers.handleHeroMenu);
@@ -462,14 +482,13 @@ ${balanceInfo}${activeStrategiesInfo}
 🎯 **Available Strategies:**
 • **Martingale Bot:** DCA with multipliers
 • **🕸️ Grid Trading:** Automated buy low, sell high
-• **Yeet Assistant:** AI-powered trades
       `;
       
       await ctx.editMessageText(message, {
         parse_mode: 'Markdown',
         ...require('telegraf').Markup.inlineKeyboard([
           [require('telegraf').Markup.button.callback('🤖 Martingale Bot', 'martingale_menu')],
-          [require('telegraf').Markup.button.callback('🕸️ Grid Trading', 'grid_menu'), require('telegraf').Markup.button.callback('🚀 Yeet Assistant', 'yeet_assistant')],
+          [require('telegraf').Markup.button.callback('🕸️ Grid Trading', 'grid_menu')],
           [require('telegraf').Markup.button.callback('🔙 Back to Main', 'back_to_main')]
         ])
       });

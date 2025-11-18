@@ -321,12 +321,15 @@ ${getBotTitle()}
 • Range-bound price action
 • Adequate liquidity
 
-🚀 **Send the token now!**
+🚀 **Send the token now or select a quick token:**
   `.trim();
 
   await ctx.editMessageText(message, {
     parse_mode: 'Markdown',
     ...Markup.inlineKeyboard([
+      [Markup.button.callback('$MIRA🦈', 'grid_quick_2uk6wbuauQSkxXfoFPmfG8c9GQuzkJJDCUYUZ4b2pump'), Markup.button.callback('$ORE⛏️', 'grid_quick_oreoU2P8bN6jkk3jbaiVxYnG1dCXcYxwhwyK9jSybcp')],
+      [Markup.button.callback('$zKSL💻', 'grid_quick_9Yn6bnF3eKLqocUVMxduh7WWqgQZ8DvWQDYTX9Ncpump'), Markup.button.callback('$NEET👽', 'grid_quick_Ce2gx9KGXJ6C9Mp5b5x1sn9Mg87JwEbrQby4Zqo3pump')],
+      [Markup.button.callback('$TROLL😈', 'grid_quick_5UUH9RTDiSpq6HKS6bp4NdU9PNJpXRXuiw6ShBTBhgH2'), Markup.button.callback('$AVICI🔺', 'grid_quick_BANKJmvhT8tiJRsBSS1n2HryMBPvT5Ze4HU95DUAmeta')],
       [Markup.button.callback('❌ Cancel', 'grid_menu')]
     ])
   });
