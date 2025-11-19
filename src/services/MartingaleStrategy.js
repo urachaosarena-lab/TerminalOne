@@ -281,7 +281,7 @@ class MartingaleStrategy {
 
     strategy.isMonitoring = true;
 
-    // Use interval-based monitoring (check every 30 seconds)
+    // Use interval-based monitoring (check every 60 seconds to reduce API load)
     const monitoringInterval = setInterval(async () => {
       try {
         if (strategy.status !== 'active') {
@@ -294,7 +294,7 @@ class MartingaleStrategy {
       } catch (error) {
         logger.error(`Error monitoring strategy ${strategy.id}:`, error);
       }
-    }, 30000); // Check every 30 seconds
+    }, 60000); // Check every 60 seconds
 
     this.strategyMonitors.set(strategy.id, {
       interval: monitoringInterval,
