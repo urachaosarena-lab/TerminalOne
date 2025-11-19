@@ -1560,6 +1560,8 @@ module.exports = {
   handleTradingHistory,
   handleDetailedAnalytics,
   handleExportReport,
+  getUserConfig,
+  calculateMaxInvestment,
   STRATEGY_PRESETS
 };
 

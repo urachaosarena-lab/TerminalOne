@@ -267,11 +267,98 @@ class TerminalOneBot {
     // Quick-access token buttons for Martingale
     this.bot.action(/martingale_quick_(.+)/, async (ctx) => {
       const tokenAddress = ctx.match[1];
-      // Simulate token analysis by creating a fake message with the token address
-      ctx.session = ctx.session || {};
-      ctx.session.awaitingToken = true;
-      ctx.message = { text: tokenAddress };
-      await martingaleHandlers.handleTokenAnalysis(ctx);
+      const userId = ctx.from.id;
+      const tokenAnalysisService = ctx.services?.tokenAnalysis;
+      
+      await ctx.answerCbQuery('🔍 Analyzing token...');
+      
+      try {
+        // Show analysis in progress
+        await ctx.editMessageText(
+          `${require('../utils/version').getBotTitle()}\n\n🔍 **Analyzing token...**\n\n⏳ Fetching market data, please wait...`,
+          { parse_mode: 'Markdown' }
+        );
+        
+        // Perform token analysis
+        const analysis = await tokenAnalysisService.analyzeToken(tokenAddress);
+        const formatted = tokenAnalysisService.formatAnalysisForDisplay(analysis);
+        
+        // Get user configuration
+        const { getUserConfig, calculateMaxInvestment } = require('../commands/martingale');
+        const userConfig = getUserConfig(ctx, userId);
+        const maxInvestment = calculateMaxInvestment(userConfig);
+        
+        const analysisMessage = `
+${require('../utils/version').getBotTitle()}
+
+${formatted.header}
+
+${formatted.price}
+${formatted.changes}
+${formatted.volume}
+
+🤖 **Your Martingale Setup:**
+💰 Initial: ${userConfig.initialBuyAmount} SOL | 📉 Trigger: ${userConfig.dropPercentage}%
+⚡ Multiplier: ${userConfig.multiplier}x | 🔢 Levels: ${userConfig.maxLevels}
+🎯 Profit: ${userConfig.profitTarget}% | 📎 Max Risk: ${maxInvestment.toFixed(4)} SOL
+
+🚀 **Ready to launch?**
+        `;
+        
+        // Store analysis for potential launch
+        ctx.session = ctx.session || {};
+        ctx.session.tokenAnalysis = analysis;
+        ctx.session.awaitingToken = false;
+        
+        const { Markup } = require('telegraf');
+        await ctx.editMessageText(analysisMessage, {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback('🚀 Launch Strategy', 'martingale_confirm_launch')],
+            [Markup.button.callback('⚙️ Adjust Config', 'martingale_configure')],
+            [Markup.button.callback('🔍 Analyze Another', 'martingale_launch')],
+            [Markup.button.callback('🔙 Back', 'martingale_menu')]
+          ])
+        });
+        
+      } catch (error) {
+        require('../utils/logger').error(`Quick token analysis error for ${tokenAddress}:`, error);
+        
+        let errorMessage = `${require('../utils/version').getBotTitle()}\n\n❌ **Token Analysis Failed**\n\n`;
+        let suggestions = [];
+        
+        if (error.message.includes('not found')) {
+          errorMessage += `🔍 **Token not found**\n\n`;
+          suggestions = [
+            '✅ Use the full contract address (43-44 characters)',
+            '🔄 Try another token from the quick buttons',
+            '🌐 Try popular tokens like SOL, BONK, USDC'
+          ];
+        } else if (error.message.includes('timeout') || error.message.includes('ENOTFOUND')) {
+          errorMessage += `🌐 **Network Connection Issues**\n\n`;
+          suggestions = [
+            '🔄 Network is slow - please try again in a moment',
+            '📊 APIs may be temporarily unavailable'
+          ];
+        } else {
+          errorMessage += `⚠️ **Technical Error**\n\n${error.message}\n\n`;
+          suggestions = [
+            '🔄 Try again with a different token',
+            '📞 Contact support if this persists'
+          ];
+        }
+        
+        errorMessage += `💡 **Try these:**\n${suggestions.join('\n')}`;
+        
+        const { Markup } = require('telegraf');
+        await ctx.editMessageText(errorMessage, {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback('🔍 Try Again', 'martingale_launch')],
+            [Markup.button.callback('🔙 Back', 'martingale_menu')]
+          ])
+        });
+      }
     });
     
     // Grid trading callbacks
@@ -295,11 +382,97 @@ class TerminalOneBot {
     // Quick-access token buttons for Grid
     this.bot.action(/grid_quick_(.+)/, async (ctx) => {
       const tokenAddress = ctx.match[1];
-      // Simulate token analysis by creating a fake message with the token address
-      ctx.session = ctx.session || {};
-      ctx.session.awaitingGridToken = true;
-      ctx.message = { text: tokenAddress };
-      await gridHandlers.handleTokenAnalysis(ctx);
+      const userId = ctx.from.id;
+      const tokenAnalysisService = ctx.services?.tokenAnalysis;
+      const gridService = ctx.services?.grid;
+      
+      await ctx.answerCbQuery('🔍 Analyzing token...');
+      
+      try {
+        // Show analysis in progress
+        await ctx.editMessageText(
+          `${require('../utils/version').getBotTitle()}\n\n🔍 **Analyzing token...**\n\n⏳ Fetching market data, please wait...`,
+          { parse_mode: 'Markdown' }
+        );
+        
+        // Perform token analysis
+        const analysis = await tokenAnalysisService.analyzeToken(tokenAddress);
+        const formatted = tokenAnalysisService.formatAnalysisForDisplay(analysis);
+        
+        // Get user configuration
+        const config = gridService.getUserConfig(userId);
+        
+        const analysisMessage = `
+${require('../utils/version').getBotTitle()}
+
+${formatted.header}
+
+${formatted.price}
+${formatted.changes}
+${formatted.volume}
+
+🕸️ **Your Grid Setup:**
+💰 Initial: ${config.initialAmount} SOL | 📉 Buys: ${config.numBuys} | 📈 Sells: ${config.numSells}
+📊 Drop: ${config.dropPercent}% | 🚀 Leap: ${config.leapPercent}%
+📈 Max Coverage: ±${Math.max(config.dropPercent * config.numBuys, config.leapPercent * config.numSells).toFixed(1)}%
+
+🚀 **Ready to launch?**
+        `.trim();
+        
+        // Store analysis for launch
+        ctx.session = ctx.session || {};
+        ctx.session.gridTokenAnalysis = analysis;
+        ctx.session.awaitingGridToken = false;
+        
+        const { Markup } = require('telegraf');
+        await ctx.editMessageText(analysisMessage, {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback('🚀 Launch Grid', 'grid_confirm_launch')],
+            [Markup.button.callback('⚙️ Adjust Config', 'grid_configure')],
+            [Markup.button.callback('🔍 Analyze Another', 'grid_launch')],
+            [Markup.button.callback('🔙 Back', 'grid_menu')]
+          ])
+        });
+        
+      } catch (error) {
+        require('../utils/logger').error(`Quick token analysis error for ${tokenAddress}:`, error);
+        
+        let errorMessage = `${require('../utils/version').getBotTitle()}\n\n❌ **Token Analysis Failed**\n\n`;
+        let suggestions = [];
+        
+        if (error.message.includes('not found')) {
+          errorMessage += `🔍 **Token not found**\n\n`;
+          suggestions = [
+            '✅ Use the full contract address (43-44 characters)',
+            '🔄 Try another token from the quick buttons',
+            '🌐 Try popular tokens like SOL, BONK, USDC'
+          ];
+        } else if (error.message.includes('timeout') || error.message.includes('ENOTFOUND')) {
+          errorMessage += `🌐 **Network Connection Issues**\n\n`;
+          suggestions = [
+            '🔄 Network is slow - please try again in a moment',
+            '📊 APIs may be temporarily unavailable'
+          ];
+        } else {
+          errorMessage += `⚠️ **Technical Error**\n\n${error.message}\n\n`;
+          suggestions = [
+            '🔄 Try again with a different token',
+            '📞 Contact support if this persists'
+          ];
+        }
+        
+        errorMessage += `💡 **Try these:**\n${suggestions.join('\n')}`;
+        
+        const { Markup } = require('telegraf');
+        await ctx.editMessageText(errorMessage, {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback('🔍 Try Again', 'grid_launch')],
+            [Markup.button.callback('🔙 Back', 'grid_menu')]
+          ])
+        });
+      }
     });
     
     // Hero/RPG callbacks
