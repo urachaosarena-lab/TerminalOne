@@ -293,7 +293,7 @@ class TerminalOneBot {
       try {
         // Show analysis in progress
         await ctx.editMessageText(
-          `${require('../utils/version').getBotTitle()}\n\n🔍 **Analyzing token...**\n\n⏳ Fetching market data, please wait...`,
+          `${require('./utils/version').getBotTitle()}\n\n🔍 **Analyzing token...**\n\n⏳ Fetching market data, please wait...`,
           { parse_mode: 'Markdown' }
         );
         
@@ -302,12 +302,12 @@ class TerminalOneBot {
         const formatted = tokenAnalysisService.formatAnalysisForDisplay(analysis);
         
         // Get user configuration
-        const { getUserConfig, calculateMaxInvestment } = require('../commands/martingale');
+        const { getUserConfig, calculateMaxInvestment } = require('./commands/martingale');
         const userConfig = getUserConfig(ctx, userId);
         const maxInvestment = calculateMaxInvestment(userConfig);
         
         const analysisMessage = `
-${require('../utils/version').getBotTitle()}
+${require('./utils/version').getBotTitle()}
 
 ${formatted.header}
 
@@ -340,9 +340,9 @@ ${formatted.volume}
         });
         
       } catch (error) {
-        require('../utils/logger').error(`Quick token analysis error for ${tokenAddress}:`, error);
+        require('./utils/logger').error(`Quick token analysis error for ${tokenAddress}:`, error);
         
-        let errorMessage = `${require('../utils/version').getBotTitle()}\n\n❌ **Token Analysis Failed**\n\n`;
+        let errorMessage = `${require('./utils/version').getBotTitle()}\n\n❌ **Token Analysis Failed**\n\n`;
         let suggestions = [];
         
         if (error.message.includes('not found')) {
@@ -418,7 +418,7 @@ ${formatted.volume}
       try {
         // Show analysis in progress
         await ctx.editMessageText(
-          `${require('../utils/version').getBotTitle()}\n\n🔍 **Analyzing token...**\n\n⏳ Fetching market data, please wait...`,
+          `${require('./utils/version').getBotTitle()}\n\n🔍 **Analyzing token...**\n\n⏳ Fetching market data, please wait...`,
           { parse_mode: 'Markdown' }
         );
         
@@ -430,7 +430,7 @@ ${formatted.volume}
         const config = gridService.getUserConfig(userId);
         
         const analysisMessage = `
-${require('../utils/version').getBotTitle()}
+${require('./utils/version').getBotTitle()}
 
 ${formatted.header}
 
@@ -463,9 +463,9 @@ ${formatted.volume}
         });
         
       } catch (error) {
-        require('../utils/logger').error(`Quick token analysis error for ${tokenAddress}:`, error);
+        require('./utils/logger').error(`Quick token analysis error for ${tokenAddress}:`, error);
         
-        let errorMessage = `${require('../utils/version').getBotTitle()}\n\n❌ **Token Analysis Failed**\n\n`;
+        let errorMessage = `${require('./utils/version').getBotTitle()}\n\n❌ **Token Analysis Failed**\n\n`;
         let suggestions = [];
         
         if (error.message.includes('not found')) {
