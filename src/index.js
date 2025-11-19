@@ -265,10 +265,28 @@ class TerminalOneBot {
     this.bot.action('history_export', martingaleHandlers.handleExportReport);
     
     // Quick-access token buttons for Martingale
-    this.bot.action(/martingale_quick_(.+)/, async (ctx) => {
-      const tokenAddress = ctx.match[1];
+    // Token lookup table to keep callback data under Telegram's 64-byte limit
+    const QUICK_TOKENS = {
+      '1': '2uk6wbuauQSkxXfoFPmfG8c9GQuzkJJDCUYUZ4b2pump', // MIRA
+      '2': 'oreoU2P8bN6jkk3jbaiVxYnG1dCXcYxwhwyK9jSybcp',  // ORE
+      '3': '9Yn6bnF3eKLqocUVMxduh7WWqgQZ8DvWQDYTX9Ncpump', // zKSL
+      '4': 'Ce2gx9KGXJ6C9Mp5b5x1sn9Mg87JwEbrQby4Zqo3pump', // NEET
+      '5': '5UUH9RTDiSpq6HKS6bp4NdU9PNJpXRXuiw6ShBTBhgH2', // TROLL
+      '6': 'BANKJmvhT8tiJRsBSS1n2HryMBPvT5Ze4HU95DUAmeta'  // AVICI
+    };
+    
+    this.bot.action(/martingale_quick_(\d+)/, async (ctx) => {
+      const tokenId = ctx.match[1];
+      const tokenAddress = QUICK_TOKENS[tokenId];
       const userId = ctx.from.id;
       const tokenAnalysisService = ctx.services?.tokenAnalysis;
+      
+      console.log(`[MARTINGALE QUICK] Button clicked - ID: ${tokenId}, Address: ${tokenAddress}`);
+      
+      if (!tokenAddress) {
+        await ctx.answerCbQuery('❌ Invalid token ID');
+        return;
+      }
       
       await ctx.answerCbQuery('🔍 Analyzing token...');
       
@@ -380,11 +398,20 @@ ${formatted.volume}
     this.bot.action('grid_config_reset', gridHandlers.handleResetConfig);
     
     // Quick-access token buttons for Grid
-    this.bot.action(/grid_quick_(.+)/, async (ctx) => {
-      const tokenAddress = ctx.match[1];
+    // Reuse the same token lookup table
+    this.bot.action(/grid_quick_(\d+)/, async (ctx) => {
+      const tokenId = ctx.match[1];
+      const tokenAddress = QUICK_TOKENS[tokenId];
       const userId = ctx.from.id;
       const tokenAnalysisService = ctx.services?.tokenAnalysis;
       const gridService = ctx.services?.grid;
+      
+      console.log(`[GRID QUICK] Button clicked - ID: ${tokenId}, Address: ${tokenAddress}`);
+      
+      if (!tokenAddress) {
+        await ctx.answerCbQuery('❌ Invalid token ID');
+        return;
+      }
       
       await ctx.answerCbQuery('🔍 Analyzing token...');
       
