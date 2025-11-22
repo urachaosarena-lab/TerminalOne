@@ -849,9 +849,12 @@ ${importTypeEmoji} **Import Type:** ${importTypeText}
         await this.setupHealthCheckServer();
       }
 
-      // Start the bot
-      await this.bot.launch();
-      logger.info('TerminalOne bot is running! 🚀');
+      // Start the bot (webhook or polling)
+      if (config.telegram.useWebhook) {
+        await this.startWebhook();
+      } else {
+        await this.startPolling();
+      }
 
       // Graceful stop
       process.once('SIGINT', () => this.stop('SIGINT'));
@@ -861,6 +864,66 @@ ${importTypeEmoji} **Import Type:** ${importTypeText}
       logger.error('Failed to start bot:', error);
       process.exit(1);
     }
+  }
+  
+  async startWebhook() {
+    const express = require('express');
+    const { webhookDomain, webhookPath, webhookPort, webhookSecret } = config.telegram;
+    
+    try {
+      // Delete existing webhook first
+      await this.bot.telegram.deleteWebhook({ drop_pending_updates: true });
+      logger.info('Deleted existing webhook');
+      
+      // Set new webhook
+      await this.bot.telegram.setWebhook(
+        `${webhookDomain}${webhookPath}`,
+        {
+          drop_pending_updates: true,
+          secret_token: webhookSecret,
+          allowed_updates: ['message', 'callback_query']
+        }
+      );
+      logger.info(`Webhook set: ${webhookDomain}${webhookPath}`);
+      
+      // Create Express app for webhook
+      const app = express();
+      
+      // Health check endpoint
+      app.get('/health', (req, res) => {
+        res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+      });
+      
+      // Webhook endpoint with secret validation
+      app.use(this.bot.webhookCallback(webhookPath, {
+        secretToken: webhookSecret
+      }));
+      
+      // Start Express server
+      app.listen(webhookPort, () => {
+        logger.info(`🚀 Bot running on WEBHOOK mode`);
+        logger.info(`📡 Webhook URL: ${webhookDomain}${webhookPath}`);
+        logger.info(`🔌 Listening on port ${webhookPort}`);
+      });
+      
+      // Verify webhook is set correctly
+      const webhookInfo = await this.bot.telegram.getWebhookInfo();
+      logger.info('Webhook info:', {
+        url: webhookInfo.url,
+        pending_updates: webhookInfo.pending_update_count,
+        last_error: webhookInfo.last_error_message
+      });
+      
+    } catch (error) {
+      logger.error('Failed to set webhook:', error);
+      logger.info('Falling back to polling mode...');
+      await this.startPolling();
+    }
+  }
+  
+  async startPolling() {
+    await this.bot.launch();
+    logger.info('🚀 Bot running on POLLING mode');
   }
   
   async stop(reason) {

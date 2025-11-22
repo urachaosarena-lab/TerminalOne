@@ -5,6 +5,13 @@ module.exports = {
   telegram: {
     token: process.env.TELEGRAM_BOT_TOKEN,
     adminChatIds: process.env.ADMIN_CHAT_IDS?.split(',').map(id => parseInt(id.trim())) || [],
+    
+    // Webhook configuration
+    useWebhook: process.env.USE_WEBHOOK === 'true',
+    webhookDomain: process.env.WEBHOOK_DOMAIN, // e.g., https://terminalonebot.com
+    webhookPath: process.env.WEBHOOK_PATH || '/telegram/webhook',
+    webhookPort: parseInt(process.env.WEBHOOK_PORT) || 3000,
+    webhookSecret: process.env.WEBHOOK_SECRET || null,
   },
 
   // Solana Configuration
