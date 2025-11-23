@@ -19,6 +19,8 @@ const { HeroService } = require('./services/HeroService');
 const BattleService = require('./services/BattleService');
 const AnalyticsService = require('./services/AnalyticsService');
 const NotificationService = require('./services/NotificationService');
+const BountyStatsService = require('./services/BountyStatsService');
+const BountyService = require('./services/BountyService');
 const { createHealthCheckServer } = require('./utils/healthCheck');
 const { getBotTitle } = require('./utils/version');
 
@@ -33,6 +35,7 @@ const battleHandlers = require('./commands/battle');
 const dashboardHandlers = require('./commands/dashboard');
 const activeBotsHandlers = require('./commands/activeBots');
 const notificationHandlers = require('./commands/notifications');
+const { handleBountyCommand, handleBountyRefresh } = require('./commands/bounty');
 
 class TerminalOneBot {
   constructor() {
@@ -59,6 +62,10 @@ class TerminalOneBot {
     this.rateLimitService = new RateLimitService();
     this.monitoringService = new MonitoringService();
     
+    // Bounty/Jackpot services (must be initialized before trading services)
+    this.bountyStatsService = new BountyStatsService();
+    this.bountyService = new BountyService(this.solanaService, this.bountyStatsService, this.notificationService);
+    
     this.martingaleService = new MartingaleStrategy(
       this.solanaService,
       this.enhancedPriceService,
@@ -66,7 +73,9 @@ class TerminalOneBot {
       this.jupiterTradingService, // real trading service
       this.revenueService, // revenue service for fee collection
       this.tradingHistoryService, // trading history service for analytics
-      this.notificationService // notification service for alerts
+      this.notificationService, // notification service for alerts
+      this.bountyService, // bounty service for jackpot checks
+      this.bountyStatsService // bounty stats service for tracking
     );
     
     // Grid trading service with metadata support
@@ -75,7 +84,9 @@ class TerminalOneBot {
       this.enhancedPriceService,
       this.walletService,
       this.tokenMetadataService,
-      this.notificationService // notification service for alerts
+      this.notificationService, // notification service for alerts
+      this.bountyService, // bounty service for jackpot checks
+      this.bountyStatsService // bounty stats service for tracking
     );
     
     // RPG Game services
@@ -145,7 +156,9 @@ class TerminalOneBot {
         hero: this.heroService,
         battle: this.battleService,
         analytics: this.analyticsService,
-        notifications: this.notificationService
+        notifications: this.notificationService,
+        bountyStats: this.bountyStatsService,
+        bountyService: this.bountyService
       };
       return next();
     });
@@ -620,6 +633,10 @@ ${formatted.volume}
     
     // Notification callbacks
     notificationHandlers(this.bot, this.notificationService);
+    
+    // Bounty callbacks
+    this.bot.action('bounty', (ctx) => handleBountyCommand(ctx, ctx.services));
+    this.bot.action('bounty_refresh', (ctx) => handleBountyRefresh(ctx, ctx.services));
     
     // Placeholder callbacks for future features
     this.bot.action('portfolio', (ctx) => {

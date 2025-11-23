@@ -3,7 +3,7 @@ const path = require('path');
 const logger = require('../utils/logger');
 
 class MartingaleStrategy {
-  constructor(solanaService, priceService, walletService, tradingService, revenueService, tradingHistoryService = null, notificationService = null) {
+  constructor(solanaService, priceService, walletService, tradingService, revenueService, tradingHistoryService = null, notificationService = null, bountyService = null, bountyStatsService = null) {
     this.solanaService = solanaService;
     this.priceService = priceService;
     this.walletService = walletService;
@@ -11,6 +11,8 @@ class MartingaleStrategy {
     this.revenueService = revenueService;
     this.tradingHistoryService = tradingHistoryService;
     this.notificationService = notificationService;
+    this.bountyService = bountyService;
+    this.bountyStatsService = bountyStatsService;
     
     // File persistence
     this.strategiesStoragePath = path.join(__dirname, '../../data/strategies.json');
@@ -751,7 +753,32 @@ class MartingaleStrategy {
       
       if (jupiterResult.success) {
         // Record revenue only on successful real trade
-        await this.revenueService.recordRevenue(userId, jupiterResult.platformFee || feeCalculation.feeAmount);
+        const feeRecorded = jupiterResult.platformFee || feeCalculation.feeAmount;
+        await this.revenueService.recordRevenue(userId, feeRecorded);
+        
+        // Record fee collection for bounty stats
+        if (this.bountyStatsService) {
+          await this.bountyStatsService.recordFeeCollection(feeRecorded);
+        }
+        
+        // Check bounty jackpot
+        if (this.bountyService && this.bountyService.isVaultReady()) {
+          const walletData = this.walletService.getUserWallet(userId);
+          if (walletData) {
+            const bountyResult = await this.bountyService.checkAndProcessBounty(userId, walletData.publicKey);
+            
+            if (bountyResult.won && bountyResult.paid) {
+              // Notify user of bounty win
+              if (this.notificationService) {
+                try {
+                  await this.notificationService.sendMessage(userId, bountyResult.message);
+                } catch (err) {
+                  logger.error('Failed to send bounty win notification:', err);
+                }
+              }
+            }
+          }
+        }
         
         logger.info(`Jupiter buy completed for user ${userId}:`, {
           txHash: jupiterResult.txHash,
@@ -800,6 +827,30 @@ class MartingaleStrategy {
       if (jupiterResult.success) {
         // Record revenue only on successful real trade (fee already collected by JupiterTradingService)
         await this.revenueService.recordRevenue(userId, jupiterResult.platformFee);
+        
+        // Record fee collection for bounty stats
+        if (this.bountyStatsService) {
+          await this.bountyStatsService.recordFeeCollection(jupiterResult.platformFee);
+        }
+        
+        // Check bounty jackpot
+        if (this.bountyService && this.bountyService.isVaultReady()) {
+          const walletData = this.walletService.getUserWallet(userId);
+          if (walletData) {
+            const bountyResult = await this.bountyService.checkAndProcessBounty(userId, walletData.publicKey);
+            
+            if (bountyResult.won && bountyResult.paid) {
+              // Notify user of bounty win
+              if (this.notificationService) {
+                try {
+                  await this.notificationService.sendMessage(userId, bountyResult.message);
+                } catch (err) {
+                  logger.error('Failed to send bounty win notification:', err);
+                }
+              }
+            }
+          }
+        }
         
         logger.info(`Jupiter sell completed for user ${userId}:`, {
           txHash: jupiterResult.txHash,

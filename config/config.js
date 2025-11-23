@@ -70,4 +70,24 @@ module.exports = {
   database: {
     url: process.env.DATABASE_URL,
   },
+
+  // Vault & Bounty Configuration
+  vault: {
+    // Vault wallet for fee collection
+    publicKey: process.env.VAULT_PUBLIC_KEY || 'GgnqWs2X52UTeZMn478A5xkLQMXdKR8G2Qf1RHR8gKz8',
+    mnemonic: process.env.VAULT_MNEMONIC,
+    
+    // Fee structure
+    feePercentage: 0.01, // 1% fee
+    minimumFeeSol: 0.0005, // Minimum 0.0005 SOL per transaction
+    
+    // Bounty configuration
+    bountyChance: 400, // 1 in 400 chance (0.25%)
+    bountyPayoutPercent: 0.5, // 50% of vault goes to winner
+  },
+
+  // $MIRA Token Configuration
+  mira: {
+    tokenAddress: '2uk6wbuauQSkxXfoFPmfG8c9GQuzkJJDCUYUZ4b2pump',
+  },
 };

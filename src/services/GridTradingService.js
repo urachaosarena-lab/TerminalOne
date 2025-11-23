@@ -3,12 +3,14 @@ const fs = require('fs');
 const path = require('path');
 
 class GridTradingService {
-  constructor(jupiterTradingService, enhancedPriceService, walletService, tokenMetadataService = null, notificationService = null) {
+  constructor(jupiterTradingService, enhancedPriceService, walletService, tokenMetadataService = null, notificationService = null, bountyService = null, bountyStatsService = null) {
     this.jupiterService = jupiterTradingService;
     this.priceService = enhancedPriceService;
     this.walletService = walletService;
     this.tokenMetadataService = tokenMetadataService;
     this.notificationService = notificationService;
+    this.bountyService = bountyService;
+    this.bountyStatsService = bountyStatsService;
     
     // Active grids: userId -> gridId -> gridState
     this.activeGrids = new Map();
@@ -523,6 +525,31 @@ class GridTradingService {
           txHash: buyResult.txHash
         });
         
+        // Record fee for bounty stats and check bounty jackpot
+        if (buyResult.platformFee) {
+          if (this.bountyStatsService) {
+            await this.bountyStatsService.recordFeeCollection(buyResult.platformFee);
+          }
+          
+          if (this.bountyService && this.bountyService.isVaultReady()) {
+            const walletData = this.walletService.getUserWallet(userId);
+            if (walletData) {
+              const bountyResult = await this.bountyService.checkAndProcessBounty(userId, walletData.publicKey);
+              
+              if (bountyResult.won && bountyResult.paid) {
+                // Notify user of bounty win
+                if (this.notificationService) {
+                  try {
+                    await this.notificationService.sendMessage(userId, bountyResult.message);
+                  } catch (err) {
+                    logger.error('Failed to send bounty win notification:', err);
+                  }
+                }
+              }
+            }
+          }
+        }
+        
         logger.info('Buy grid order filled', { 
           userId, 
           gridId: gridState.gridId,
@@ -595,6 +622,31 @@ class GridTradingService {
           timestamp: new Date(),
           txHash: sellResult.txHash
         });
+        
+        // Record fee for bounty stats and check bounty jackpot
+        if (sellResult.platformFee) {
+          if (this.bountyStatsService) {
+            await this.bountyStatsService.recordFeeCollection(sellResult.platformFee);
+          }
+          
+          if (this.bountyService && this.bountyService.isVaultReady()) {
+            const walletData = this.walletService.getUserWallet(userId);
+            if (walletData) {
+              const bountyResult = await this.bountyService.checkAndProcessBounty(userId, walletData.publicKey);
+              
+              if (bountyResult.won && bountyResult.paid) {
+                // Notify user of bounty win
+                if (this.notificationService) {
+                  try {
+                    await this.notificationService.sendMessage(userId, bountyResult.message);
+                  } catch (err) {
+                    logger.error('Failed to send bounty win notification:', err);
+                  }
+                }
+              }
+            }
+          }
+        }
         
         logger.info('Sell grid order filled', { 
           userId, 
