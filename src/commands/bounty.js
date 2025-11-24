@@ -13,20 +13,31 @@ async function handleBountyCommand(ctx, services) {
     // Format the dashboard message
     const message = formatBountyDashboard(stats);
 
-    // Send dashboard with back button
-    await ctx.reply(message, {
+    // Send or edit dashboard with back button
+    const keyboard = {
       parse_mode: 'Markdown',
       reply_markup: {
         inline_keyboard: [
           [{ text: '🔄 Refresh Stats', callback_data: 'bounty_refresh' }],
-          [{ text: '🏠 Back to Menu', callback_data: 'start' }]
+          [{ text: '🔙 Back to Menu', callback_data: 'back_to_main' }]
         ]
       }
-    });
+    };
+
+    if (ctx.callbackQuery) {
+      await ctx.editMessageText(message, keyboard);
+      await ctx.answerCbQuery();
+    } else {
+      await ctx.reply(message, keyboard);
+    }
 
   } catch (error) {
     logger.error('Error showing bounty dashboard:', error);
-    await ctx.reply('❌ Error loading bounty dashboard. Please try again later.');
+    if (ctx.callbackQuery) {
+      await ctx.answerCbQuery('❌ Error loading dashboard');
+    } else {
+      await ctx.reply('❌ Error loading bounty dashboard. Please try again later.');
+    }
   }
 }
 
@@ -97,7 +108,7 @@ async function handleBountyRefresh(ctx, services) {
       reply_markup: {
         inline_keyboard: [
           [{ text: '🔄 Refresh Stats', callback_data: 'bounty_refresh' }],
-          [{ text: '🏠 Back to Menu', callback_data: 'start' }]
+          [{ text: '🔙 Back to Menu', callback_data: 'back_to_main' }]
         ]
       }
     });

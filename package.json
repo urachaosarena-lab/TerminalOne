@@ -1,6 +1,6 @@
 {
   "name": "terminalone-bot",
-  "version": "1.00.1",
+  "version": "1.00.2",
   "description": "A multi-feature Telegram bot with Solana blockchain integration",
   "main": "src/index.js",
   "scripts": {
