@@ -175,13 +175,17 @@ ${paramType === 'drop' || paramType === 'leap' ? '• 1% (tight range)\n• 2% (
   try {
     await ctx.editMessageText(message, {
       parse_mode: 'Markdown',
-      ...keyboard
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback('❌ Cancel', 'grid_configure')]
+      ])
     });
   } catch (error) {
     if (error.description?.includes('message to edit not found')) {
       await ctx.reply(message, {
         parse_mode: 'Markdown',
-        ...keyboard
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback('❌ Cancel', 'grid_configure')]
+        ])
       });
     } else {
       throw error;
