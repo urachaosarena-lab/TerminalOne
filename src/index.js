@@ -861,6 +861,12 @@ ${importTypeEmoji} **Import Type:** ${importTypeText}
       await this.solanaService.initialize();
       logger.info('Solana service initialized');
       
+      // Set bot commands menu
+      await this.bot.telegram.setMyCommands([
+        { command: 'start', description: '🏠 Main Menu & Dashboard' }
+      ]);
+      logger.info('Bot commands menu set');
+      
       // Setup health check server in production
       if (config.production?.enableHealthCheck) {
         await this.setupHealthCheckServer();
