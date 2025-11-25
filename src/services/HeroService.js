@@ -230,27 +230,52 @@ class HeroService {
   equipItem(userId, inventoryIndex) {
     userId = String(userId);
     const hero = this.getHero(userId);
-    if (!hero || inventoryIndex >= hero.inventory.length) return false;
+    if (!hero || inventoryIndex >= hero.inventory.length) {
+      return { success: false, error: 'Invalid item index' };
+    }
     
     const item = hero.inventory[inventoryIndex];
+    
+    // If there's already an item equipped in this slot, return it to inventory first
+    if (hero.equipped[item.type]) {
+      const oldItemId = hero.equipped[item.type];
+      
+      // Find the rarity of the old item by looking it up
+      // Since we don't store rarity with equipped items, we need to determine it
+      // For now, we'll add it back as 'common' - this could be improved by storing rarity with equipped items
+      const oldItemRarity = 'common'; // Default assumption
+      
+      // Add old item back to inventory
+      hero.inventory.push({
+        type: item.type,
+        id: oldItemId,
+        rarity: oldItemRarity,
+        addedAt: Date.now()
+      });
+    }
+    
+    // Equip the new item
     hero.equipped[item.type] = item.id;
     hero.inventory.splice(inventoryIndex, 1);
     this.saveHeroesToFile();
-    return true;
+    
+    return { success: true, item };
   }
 
   // Unequip item
   unequipItem(userId, itemType) {
     userId = String(userId);
     const hero = this.getHero(userId);
-    if (!hero || !hero.equipped[itemType]) return false;
+    if (!hero || !hero.equipped[itemType]) {
+      return { success: false, error: 'No item equipped' };
+    }
     
     // Return item to inventory
     const itemId = hero.equipped[itemType];
     this.addItem(userId, itemType, itemId, 'common'); // Default rarity
     hero.equipped[itemType] = null;
     this.saveHeroesToFile();
-    return true;
+    return { success: true };
   }
 
   // New sell system with proper pricing
