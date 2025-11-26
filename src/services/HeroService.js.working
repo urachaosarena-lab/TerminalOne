@@ -4,37 +4,43 @@ const logger = require('../utils/logger');
 
 // Item definitions
 const CLASSES = {
-   ' 💂 ' : { name:  ' Guard ' , ability: { name:  ' Shield ' , effect:  ' shield ' , dmg: [4, 20], desc:  ' Apply a 4-20 🛡️shield to you and your allies for 2 turns '  }},
-   ' 🧝 ' : { name:  ' Elf ' , ability: { name:  ' Nature Breeze ' , effect:  ' heal ' , value: 30, desc:  ' Heal 30HP to an ally or yourself '  }},
-   ' 🧙 ' : { name:  ' Wizard ' , ability: { name:  ' Fireball ' , effect:  ' damage ' , dmg: [15, 40], target:  ' two ' , desc:  ' Deal 15-40 damage to a maximum of 2 random enemies '  }},
-   ' 🧚 ' : { name:  ' Fairy ' , ability: { name:  ' Dispel ' , effect:  ' teamHeal ' , dmg: [2, 12], desc:  ' Heal you and your allies for 2-12 '  }},
-   ' 🧞 ' : { name:  ' Genie ' , ability: { name:  ' Wish ' , effect:  ' revive ' , value: 0.5, desc:  ' 50% chance to revive a fallen ally with 50% HP '  }},
-   ' 🧛 ' : { name:  ' Vampire ' , ability: { name:  ' Life Drain ' , effect:  ' drain ' , dmg: [8, 14], desc:  ' Deal 10-20 damage to all enemies and heal for 25% of the amount dealt '  }}
+  '👷': { name: 'Worker', ability: { name: 'Shield Wall', effect: 'block', value: 0.3, desc: '30% chance to block all damage this turn' }},
+  '💂': { name: 'Guard', ability: { name: 'Taunt', effect: 'taunt', value: 1, desc: 'Force all enemies to attack you' }},
+  '🕵️': { name: 'Detective', ability: { name: 'Analyze', effect: 'weaken', value: 0.25, desc: 'Reduce enemy damage by 25% for 2 turns' }},
+  '🧝': { name: 'Elf', ability: { name: 'Nature Heal', effect: 'heal', value: 30, desc: 'Heal 30HP to all allies' }},
+  '🧙': { name: 'Wizard', ability: { name: 'Mana Shield', effect: 'shield', value: 50, desc: 'Grant 50 shield to all allies' }},
+  '🦹': { name: 'Hero', ability: { name: 'Inspire', effect: 'buff', value: 0.5, desc: 'Increase all ally damage by 50% for 2 turns' }},
+  '🧚': { name: 'Fairy', ability: { name: 'Dispel', effect: 'cleanse', value: 1, desc: 'Remove all debuffs from allies' }},
+  '🧞': { name: 'Genie', ability: { name: 'Wish', effect: 'revive', value: 0.5, desc: '50% chance to revive a fallen ally with 50% HP' }},
+  '🧛': { name: 'Vampire', ability: { name: 'Life Drain', effect: 'drain', value: 25, desc: 'Deal 25 damage and heal for amount dealt' }}
 };
 
 const WEAPONS = {
-   ' 🏹 ' : { name:  ' Bow ' , ability: { name:  ' Pierce Shot ' , dmg: [5, 50], target:  ' single ' , desc:  ' 5-50 damage to one enemy '  }},
-   ' 🔨 ' : { name:  ' Hammer ' , ability: { name:  ' Ground Slam ' , dmg: [5, 20], target:  ' all ' , desc:  ' 5-20 damage to all enemies '  }},
-   ' 🪓 ' : { name:  ' Axe ' , ability: { name:  ' Cleave ' , dmg: [20, 35], target:  ' single ' , desc:  ' 20-35 damage to one enemy '  }},
-   ' 🗡️ ' : { name:  ' Sword ' , ability: { name:  ' Slash ' , dmg: [15, 40], target:  ' single ' , desc:  ' 15-40 damage to one enemy '  }},
-   ' ⚔️ ' : { name:  ' Dual Swords ' , ability: { name:  ' Double Strike ' , dmg: [12, 25], target:  ' two ' , desc:  ' 12-25 damage to two random enemies '  }},
-   ' 🔫 ' : { name:  ' Gun ' , ability: { name:  ' Rapid Fire ' , dmg: [10, 15], target:  ' all ' , desc:  ' 10-15 damage to all enemies '  }}
+  '🦴': { name: 'Bone', ability: { name: 'Bone Crush', dmg: [15, 30], target: 'single', desc: '15-30 damage to one enemy' }},
+  '🏹': { name: 'Bow', ability: { name: 'Pierce Shot', dmg: [20, 35], target: 'single', desc: '20-35 damage to one enemy' }},
+  '🔨': { name: 'Hammer', ability: { name: 'Ground Slam', dmg: [10, 20], target: 'all', desc: '10-20 damage to all enemies' }},
+  '🪓': { name: 'Axe', ability: { name: 'Cleave', dmg: [25, 40], target: 'single', desc: '25-40 damage to one enemy' }},
+  '🗡️': { name: 'Sword', ability: { name: 'Slash', dmg: [18, 32], target: 'single', desc: '18-32 damage to one enemy' }},
+  '⚔️': { name: 'Dual Swords', ability: { name: 'Double Strike', dmg: [12, 24], target: 'two', desc: '12-24 damage to two enemies' }},
+  '🔫': { name: 'Gun', ability: { name: 'Rapid Fire', dmg: [8, 16], target: 'all', desc: '8-16 damage to all enemies' }}
 };
 
 const PETS = {
-   ' 🕷️ ' : { name:  ' Spider ' , ability: { name:  ' Web Trap ' , effect:  ' stun ' , value: 0.3, desc:  ' +30% ✨stun chance '  }},
-   ' 🦎 ' : { name:  ' Lizard ' , ability: { name:  ' Regeneration ' , effect:  ' regen ' , value: 5, desc:  ' Heal 5HP per turn '  }},
-   ' 🐍 ' : { name:  ' Snake ' , ability: { name:  ' Bite ' , effect:  ' bleed ' , value: 0.3, desc:  ' +30% 🩸bleed chance '  }},
-   ' 🐙 ' : { name:  ' Octopus ' , ability: { name:  ' Ink Cloud ' , effect:  ' dodge ' , value: 0.2, desc:  ' +20% dodge chance '  }},
-   ' 🐋 ' : { name:  ' Whale ' , ability: { name:  ' Tidal Wave ' , effect:  ' splash ' , value: 0.3, desc:  ' +30% splash damage '  }},
-   ' 🐂 ' : { name:  ' Bull ' , ability: { name:  ' Rage ' , effect:  ' rage ' , value: 2, desc:  ' +2 bonus damage accumulation per turn '  }},
-   ' 🐻 ' : { name:  ' Bear ' , ability: { name:  ' Thick Fur ' , effect:  ' defense ' , value: 0.08, desc:  ' Reduce damage taken by 8% '  }},
-   ' 🐐 ' : { name:  ' Goat ' , ability: { name:  ' Headbutt ' , effect:  ' damage ' , value: 0.5, dmg: 10, desc:  ' 50% chance to do 10 bonus damage '  }},
-   ' 🦉 ' : { name:  ' Owl ' , ability: { name:  ' Wisdom ' , effect:  ' wisdom ' , value: 0.5, desc:  ' Healing effects are increased by 50% '  }},
-   ' 🐕 ' : { name:  ' Dog ' , ability: { name:  ' Loyalty ' , effect:  ' bite ' , dmg: [5, 30], desc:  ' 5-30 damage on a random enemy '  }},
-   ' 🐈 ' : { name:  ' Cat ' , ability: { name:  ' Nine Lives ' , effect:  ' survival ' , value: 0.5, desc:  ' 50% chance to survive fatal damage '  }}
+  '🕷️': { name: 'Spider', ability: { name: 'Web Trap', effect: 'slow', value: 0.2, desc: '+20% stun chance' }},
+  '🦎': { name: 'Lizard', ability: { name: 'Regeneration', effect: 'regen', value: 5, desc: 'Heal 5HP per turn' }},
+  '🐍': { name: 'Snake', ability: { name: 'Venom', effect: 'poison', value: 0.2, desc: '+20% bleed chance' }},
+  '🐙': { name: 'Octopus', ability: { name: 'Ink Cloud', effect: 'dodge', value: 0.15, desc: '+15% dodge chance' }},
+  '🐋': { name: 'Whale', ability: { name: 'Tidal Wave', effect: 'splash', value: 0.3, desc: '+30% splash damage' }},
+  '🐂': { name: 'Bull', ability: { name: 'Rage', effect: 'strength', value: 5, desc: '+5 Strength' }},
+  '🐻': { name: 'Bear', ability: { name: 'Thick Fur', effect: 'defense', value: 0.15, desc: 'Reduce damage taken by 15%' }},
+  '🦙': { name: 'Llama', ability: { name: 'Spit', effect: 'accuracy', value: 0.1, desc: '+10% critical hit chance' }},
+  '🐐': { name: 'Goat', ability: { name: 'Headbutt', effect: 'knockback', value: 10, desc: 'Deal 10 bonus damage' }},
+  '🦉': { name: 'Owl', ability: { name: 'Wisdom', effect: 'wisdom', value: 5, desc: '+5 Wisdom' }},
+  '🐕': { name: 'Dog', ability: { name: 'Loyalty', effect: 'luck', value: 5, desc: '+5 Luck' }},
+  '🐈': { name: 'Cat', ability: { name: 'Nine Lives', effect: 'survival', value: 0.1, desc: '10% chance to survive fatal damage' }}
 };
 
+const ENEMIES = ['🧝', '🧞', '🧛', '🧜', '🧟', '🐦‍⬛', '🕷️', '🦟', '🦇', '🦖'];
 
 class HeroService {
   constructor() {
