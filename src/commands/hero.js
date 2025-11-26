@@ -102,13 +102,16 @@ ${hero.unspentPoints > 0 ? `✨ **Unspent Points:** ${hero.unspentPoints}` : ''}
 • Strategies: ${hero.stats.strategiesOpened} opened, ${hero.stats.strategiesClosed} closed
   `;
 
-  const buttons = [[Markup.button.callback('🔙 Back', 'hero_menu'), Markup.button.callback('🏠 Main Menu', 'back_to_main')]];
+  const buttons = [];
   
   if (hero.unspentPoints > 0) {
-    buttons.unshift(
+    buttons.push(
       [Markup.button.callback('💪 +STR', 'stat_strength'), Markup.button.callback('🔮 +WIS', 'stat_wisdom'), Markup.button.callback('🍀 +LUCK', 'stat_luck')]
     );
   }
+  
+  buttons.push([Markup.button.callback('🏹 Items Guide', 'hero_items_guide')]);
+  buttons.push([Markup.button.callback('🔙 Back', 'hero_menu'), Markup.button.callback('🏠 Main Menu', 'back_to_main')]);
 
   await ctx.editMessageText(message, {
     parse_mode: 'Markdown',
@@ -453,6 +456,54 @@ ${shopList}
   });
 };
 
+const handleItemsGuide = async (ctx) => {
+  let message = `
+${getBotTitle()}
+
+🏹 **Items Guide**
+
+**CLASSES:**
+`;
+
+  // Add all classes
+  Object.entries(CLASSES).forEach(([emoji, data]) => {
+    message += `${emoji} **${data.name}**\n`;
+    message += `  • Ability: ${data.ability.name}\n`;
+    message += `  • ${data.ability.desc}\n\n`;
+  });
+
+  message += `\n**WEAPONS:**\n`;
+  
+  // Add all weapons
+  Object.entries(WEAPONS).forEach(([emoji, data]) => {
+    message += `${emoji} **${data.name}**\n`;
+    message += `  • Ability: ${data.ability.name}\n`;
+    message += `  • ${data.ability.desc}\n\n`;
+  });
+
+  message += `\n**PETS (Passive Abilities):**\n`;
+  
+  // Add all pets
+  Object.entries(PETS).forEach(([emoji, data]) => {
+    message += `${emoji} **${data.name}**\n`;
+    message += `  • Passive: ${data.ability.name}\n`;
+    message += `  • ${data.ability.desc}\n\n`;
+  });
+
+  message += `\n⭐ **Rarity Scaling:**\n`;
+  message += `All item effects scale with rarity:\n`;
+  message += `⚪ Common: 1.0x (base)\n`;
+  message += `🔵 Rare: 1.25x (+25%)\n`;
+  message += `🟠 Legendary: 1.5x (+50%)\n`;
+
+  await ctx.editMessageText(message, {
+    parse_mode: 'Markdown',
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Back to Profile', 'hero_profile')]
+    ])
+  });
+};
+
 module.exports = {
   handleHeroMenu,
   handleProfile,
@@ -462,5 +513,6 @@ module.exports = {
   handleEquipType,
   handleInventoryFuse,
   handleInventorySell,
-  handleInventoryShop
+  handleInventoryShop,
+  handleItemsGuide
 };

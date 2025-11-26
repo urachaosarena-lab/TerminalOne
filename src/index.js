@@ -520,6 +520,7 @@ ${formatted.volume}
     this.bot.action('hero_profile', heroHandlers.handleProfile);
     this.bot.action('hero_battle_menu', heroHandlers.handleBattleMenu);
     this.bot.action('hero_inventory', heroHandlers.handleInventory);
+    this.bot.action('hero_items_guide', heroHandlers.handleItemsGuide);
     
     // Stat allocation callbacks
     this.bot.action('stat_strength', async (ctx) => {
