@@ -56,9 +56,64 @@ class HeroService {
         const data = fs.readFileSync(this.heroStoragePath, 'utf8');
         const heroes = JSON.parse(data);
         
+        const REMOVED_ITEMS = {
+          class: { '👷': true, '🦹': true, '🕵️': true },
+          weapon: { '🦴': true },
+          pet: { '🦙': true }
+        };
+        
+        const VALID_ITEMS = {
+          class: ['💂', '🧝', '🧙', '🧚', '🧞', '🧛'],
+          weapon: ['🏹', '🔨', '🪓', '🗡️', '⚔️', '🔫'],
+          pet: ['🕷️', '🦎', '🐍', '🐙', '🐋', '🐂', '🐻', '🐐', '🦉', '🐕', '🐈']
+        };
+        
+        let migrationCount = 0;
+        
         Object.entries(heroes).forEach(([userId, heroData]) => {
+          ['class', 'weapon', 'pet'].forEach(type => {
+            if (heroData.equipped && heroData.equipped[type]) {
+              const equipped = heroData.equipped[type];
+              
+              if (typeof equipped === 'string') {
+                if (REMOVED_ITEMS[type] && REMOVED_ITEMS[type][equipped]) {
+                  const randomItem = VALID_ITEMS[type][Math.floor(Math.random() * VALID_ITEMS[type].length)];
+                  heroData.equipped[type] = { id: randomItem, rarity: 'common' };
+                  migrationCount++;
+                  logger.info(`Replaced removed ${type} ${equipped} with ${randomItem} for user ${userId}`);
+                } else {
+                  heroData.equipped[type] = { id: equipped, rarity: 'common' };
+                }
+              } else if (equipped && typeof equipped === 'object') {
+                if (REMOVED_ITEMS[type] && REMOVED_ITEMS[type][equipped.id]) {
+                  const randomItem = VALID_ITEMS[type][Math.floor(Math.random() * VALID_ITEMS[type].length)];
+                  heroData.equipped[type] = { id: randomItem, rarity: equipped.rarity || 'common' };
+                  migrationCount++;
+                  logger.info(`Replaced removed ${type} ${equipped.id} with ${randomItem} for user ${userId}`);
+                }
+              }
+            }
+          });
+          
+          if (heroData.inventory && Array.isArray(heroData.inventory)) {
+            heroData.inventory = heroData.inventory.map(item => {
+              if (REMOVED_ITEMS[item.type] && REMOVED_ITEMS[item.type][item.id]) {
+                const randomItem = VALID_ITEMS[item.type][Math.floor(Math.random() * VALID_ITEMS[item.type].length)];
+                migrationCount++;
+                logger.info(`Replaced inventory ${item.type} ${item.id} with ${randomItem} for user ${userId}`);
+                return { ...item, id: randomItem };
+              }
+              return item;
+            });
+          }
+          
           this.heroes.set(userId, heroData);
         });
+        
+        if (migrationCount > 0) {
+          logger.info(`Migrated ${migrationCount} items total`);
+          this.saveHeroesToFile();
+        }
         
         logger.info(`Loaded ${this.heroes.size} heroes from storage`);
       }
@@ -235,16 +290,11 @@ class HeroService {
     
     const item = hero.inventory[inventoryIndex];
     
-    // If there's already an item equipped in this slot, return it to inventory first
     if (hero.equipped[item.type]) {
-      const oldItemId = hero.equipped[item.type];
+      const oldEquipped = hero.equipped[item.type];
+      const oldItemId = typeof oldEquipped === 'string' ? oldEquipped : oldEquipped.id;
+      const oldItemRarity = typeof oldEquipped === 'object' ? oldEquipped.rarity : 'common';
       
-      // Find the rarity of the old item by looking it up
-      // Since we don't store rarity with equipped items, we need to determine it
-      // For now, we'll add it back as 'common' - this could be improved by storing rarity with equipped items
-      const oldItemRarity = 'common'; // Default assumption
-      
-      // Add old item back to inventory
       hero.inventory.push({
         type: item.type,
         id: oldItemId,
@@ -253,8 +303,7 @@ class HeroService {
       });
     }
     
-    // Equip the new item
-    hero.equipped[item.type] = item.id;
+    hero.equipped[item.type] = { id: item.id, rarity: item.rarity };
     hero.inventory.splice(inventoryIndex, 1);
     this.saveHeroesToFile();
     
@@ -269,9 +318,11 @@ class HeroService {
       return { success: false, error: 'No item equipped' };
     }
     
-    // Return item to inventory
-    const itemId = hero.equipped[itemType];
-    this.addItem(userId, itemType, itemId, 'common'); // Default rarity
+    const equipped = hero.equipped[itemType];
+    const itemId = typeof equipped === 'string' ? equipped : equipped.id;
+    const itemRarity = typeof equipped === 'object' ? equipped.rarity : 'common';
+    
+    this.addItem(userId, itemType, itemId, itemRarity);
     hero.equipped[itemType] = null;
     this.saveHeroesToFile();
     return { success: true };

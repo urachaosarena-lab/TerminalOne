@@ -104,11 +104,16 @@ class BattleService {
   getHeroAbilities(hero) {
     const abilities = [];
     
-    if (hero.equipped.class && CLASSES[hero.equipped.class]) {
-      abilities.push(CLASSES[hero.equipped.class].ability);
+    const getEquippedId = (equipped) => typeof equipped === 'string' ? equipped : (equipped ? equipped.id : null);
+    
+    const classId = getEquippedId(hero.equipped.class);
+    const weaponId = getEquippedId(hero.equipped.weapon);
+    
+    if (classId && CLASSES[classId]) {
+      abilities.push(CLASSES[classId].ability);
     }
-    if (hero.equipped.weapon && WEAPONS[hero.equipped.weapon]) {
-      abilities.push(WEAPONS[hero.equipped.weapon].ability);
+    if (weaponId && WEAPONS[weaponId]) {
+      abilities.push(WEAPONS[weaponId].ability);
     }
     
     return abilities.length > 0 ? abilities : [
@@ -262,7 +267,23 @@ class BattleService {
 
   executeDamageAbility(battle, attacker, ability, targets) {
     const [minDmg, maxDmg] = ability.dmg;
-    const baseDamage = Math.floor(Math.random() * (maxDmg - minDmg + 1)) + minDmg;
+    let baseDamage = Math.floor(Math.random() * (maxDmg - minDmg + 1)) + minDmg;
+    
+    // Apply rarity multiplier for hero equipped items
+    if (attacker.userId && attacker.equipped) {
+      const getEquippedRarity = (equipped) => {
+        if (typeof equipped === 'object' && equipped.rarity) return equipped.rarity;
+        return 'common';
+      };
+      
+      const RARITY_MULTIPLIERS = { common: 1.0, rare: 1.25, legendary: 1.5 };
+      
+      const classRarity = attacker.equipped.class ? getEquippedRarity(attacker.equipped.class) : 'common';
+      const weaponRarity = attacker.equipped.weapon ? getEquippedRarity(attacker.equipped.weapon) : 'common';
+      
+      const maxMultiplier = Math.max(RARITY_MULTIPLIERS[classRarity] || 1.0, RARITY_MULTIPLIERS[weaponRarity] || 1.0);
+      baseDamage = Math.floor(baseDamage * maxMultiplier);
+    }
     
     // Apply strength bonus
     const strengthBonus = attacker.strength ? attacker.strength * 0.5 : 0;

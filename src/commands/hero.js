@@ -62,9 +62,13 @@ const handleProfile = async (ctx) => {
   const xpProgress = hero.xp / hero.xpToNextLevel;
   const xpBar = '█'.repeat(Math.floor(xpProgress * 10)) + '░'.repeat(10 - Math.floor(xpProgress * 10));
 
-  const equippedClass = hero.equipped.class ? `${hero.equipped.class} ${CLASSES[hero.equipped.class].name}` : '❌ None';
-  const equippedWeapon = hero.equipped.weapon ? `${hero.equipped.weapon} ${WEAPONS[hero.equipped.weapon].name}` : '❌ None';
-  const equippedPet = hero.equipped.pet ? `${hero.equipped.pet} ${PETS[hero.equipped.pet].name}` : '❌ None';
+  const getEquippedId = (equipped) => typeof equipped === 'string' ? equipped : (equipped ? equipped.id : null);
+  const getEquippedRarity = (equipped) => typeof equipped === 'object' && equipped.rarity ? equipped.rarity : 'common';
+  const raritySymbols = { common: '⚪️', rare: '🔵', legendary: '🟠' };
+
+  const equippedClass = hero.equipped.class ? `${getEquippedId(hero.equipped.class)} ${CLASSES[getEquippedId(hero.equipped.class)].name} ${raritySymbols[getEquippedRarity(hero.equipped.class)]}` : '❌ None';
+  const equippedWeapon = hero.equipped.weapon ? `${getEquippedId(hero.equipped.weapon)} ${WEAPONS[getEquippedId(hero.equipped.weapon)].name} ${raritySymbols[getEquippedRarity(hero.equipped.weapon)]}` : '❌ None';
+  const equippedPet = hero.equipped.pet ? `${getEquippedId(hero.equipped.pet)} ${PETS[getEquippedId(hero.equipped.pet)].name} ${raritySymbols[getEquippedRarity(hero.equipped.pet)]}` : '❌ None';
 
   const message = `
 ${getBotTitle()}
