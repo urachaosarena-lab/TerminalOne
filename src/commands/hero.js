@@ -56,9 +56,18 @@ Welcome to the arena! Battle enemies with your companions **👩‍🦰Mira** an
 };
 
 const handleProfile = async (ctx) => {
+  console.log('[HERO] handleProfile called for user:', ctx.from.id);
   const userId = ctx.from.id;
   const heroService = ctx.services.hero;
+  
+  if (!heroService) {
+    console.error('[HERO] Hero service not available!');
+    await ctx.answerCbQuery('❌ Hero service unavailable');
+    return;
+  }
+  
   const hero = heroService.getHero(userId);
+  console.log('[HERO] Hero loaded:', hero ? 'success' : 'failed');
 
   const xpProgress = hero.xp / hero.xpToNextLevel;
   const xpBar = '█'.repeat(Math.floor(xpProgress * 10)) + '░'.repeat(10 - Math.floor(xpProgress * 10));
@@ -67,9 +76,21 @@ const handleProfile = async (ctx) => {
   const getEquippedRarity = (equipped) => typeof equipped === 'object' && equipped.rarity ? equipped.rarity : 'common';
   const raritySymbols = { common: '⚪️', rare: '🔵', legendary: '🟠' };
 
-  const equippedClass = hero.equipped.class ? `${getEquippedId(hero.equipped.class)} ${CLASSES[getEquippedId(hero.equipped.class)].name} ${raritySymbols[getEquippedRarity(hero.equipped.class)]}` : '❌ None';
-  const equippedWeapon = hero.equipped.weapon ? `${getEquippedId(hero.equipped.weapon)} ${WEAPONS[getEquippedId(hero.equipped.weapon)].name} ${raritySymbols[getEquippedRarity(hero.equipped.weapon)]}` : '❌ None';
-  const equippedPet = hero.equipped.pet ? `${getEquippedId(hero.equipped.pet)} ${PETS[getEquippedId(hero.equipped.pet)].name} ${raritySymbols[getEquippedRarity(hero.equipped.pet)]}` : '❌ None';
+  // Defensive checks for equipped items
+  const getEquippedDisplay = (equipped, itemsObj, type) => {
+    if (!equipped) return '❌ None';
+    const id = getEquippedId(equipped);
+    const item = itemsObj[id];
+    if (!item) {
+      console.warn(`[HERO] Invalid ${type} ID: ${id}`);
+      return `${id} Unknown ⚠️`;
+    }
+    return `${id} ${item.name} ${raritySymbols[getEquippedRarity(equipped)]}`;
+  };
+
+  const equippedClass = getEquippedDisplay(hero.equipped.class, CLASSES, 'class');
+  const equippedWeapon = getEquippedDisplay(hero.equipped.weapon, WEAPONS, 'weapon');
+  const equippedPet = getEquippedDisplay(hero.equipped.pet, PETS, 'pet');
 
   const message = `
 ${getBotTitle()}
@@ -157,9 +178,18 @@ ${hero.energy > 0 ? '⚔️ Ready to battle!' : '⏰ Energy recharges 1 per 30mi
 };
 
 const handleInventory = async (ctx) => {
+  console.log('[HERO] handleInventory called for user:', ctx.from.id);
   const userId = ctx.from.id;
   const heroService = ctx.services.hero;
+  
+  if (!heroService) {
+    console.error('[HERO] Hero service not available!');
+    await ctx.answerCbQuery('❌ Hero service unavailable');
+    return;
+  }
+  
   const hero = heroService.getHero(userId);
+  console.log('[HERO] Hero loaded for inventory:', hero ? 'success' : 'failed');
 
   const rarityEmoji = { common: '⚪', rare: '🔵', legendary: '🟠' };
   
@@ -178,9 +208,10 @@ const handleInventory = async (ctx) => {
     const preview = hero.inventory.slice(0, 10);
     itemsList = preview.map((item, idx) => {
       const emoji = rarityEmoji[item.rarity];
-      const name = item.type === 'class' ? CLASSES[item.id].name :
-                   item.type === 'weapon' ? WEAPONS[item.id].name :
-                   PETS[item.id].name;
+      let name = 'Unknown';
+      if (item.type === 'class' && CLASSES[item.id]) name = CLASSES[item.id].name;
+      else if (item.type === 'weapon' && WEAPONS[item.id]) name = WEAPONS[item.id].name;
+      else if (item.type === 'pet' && PETS[item.id]) name = PETS[item.id].name;
       return `${emoji} ${idx + 1}. ${item.id} ${name}`;
     }).join('\\n');
     if (hero.inventory.length > 10) {

@@ -93,6 +93,14 @@ class TerminalOneBot {
     this.heroService = new HeroService();
     this.battleService = new BattleService(this.heroService);
     
+    // Verify hero module exports
+    const { CLASSES, WEAPONS, PETS, ENEMIES } = require('./services/HeroService');
+    console.log('[INIT] Hero module verification:');
+    console.log('[INIT] CLASSES defined:', typeof CLASSES, 'keys:', Object.keys(CLASSES || {}).length);
+    console.log('[INIT] WEAPONS defined:', typeof WEAPONS, 'keys:', Object.keys(WEAPONS || {}).length);
+    console.log('[INIT] PETS defined:', typeof PETS, 'keys:', Object.keys(PETS || {}).length);
+    console.log('[INIT] ENEMIES defined:', typeof ENEMIES, 'length:', (ENEMIES || []).length);
+    
     // Analytics service
     this.analyticsService = new AnalyticsService(
       this.walletService,
