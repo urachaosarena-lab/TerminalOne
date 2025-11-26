@@ -98,6 +98,13 @@ class BattleService {
       fighter.abilities = this.generateEnemyAbilities();
     }
 
+
+    // Apply pet passive abilities
+    if (type === 'hero' && fighter.equipped && fighter.equipped.pet) {
+      fighter.petPassive = this.getPetPassive(fighter.equipped.pet);
+      fighter.rageStacks = 0; // For Bull's Rage ability
+    }
+
     return fighter;
   }
 
@@ -119,6 +126,39 @@ class BattleService {
     return abilities.length > 0 ? abilities : [
       { name: 'Punch', dmg: [5, 15], target: 'single', desc: '5-15 damage' }
     ];
+  }
+
+
+  getPetPassive(equippedPet) {
+    const getEquippedId = (equipped) => typeof equipped === 'string' ? equipped : (equipped ? equipped.id : null);
+    const getEquippedRarity = (equipped) => {
+      if (typeof equipped === 'object' && equipped.rarity) return equipped.rarity;
+      return 'common';
+    };
+    
+    const petId = getEquippedId(equippedPet);
+    const petRarity = getEquippedRarity(equippedPet);
+    
+    if (!petId || !PETS[petId]) return null;
+    
+    const RARITY_MULTIPLIERS = { common: 1.0, rare: 1.25, legendary: 1.5 };
+    const multiplier = RARITY_MULTIPLIERS[petRarity] || 1.0;
+    
+    const passive = { ...PETS[petId].ability };
+    
+    // Apply rarity scaling to values
+    if (passive.value !== undefined) {
+      passive.value = passive.value * multiplier;
+    }
+    if (passive.dmg !== undefined) {
+      if (Array.isArray(passive.dmg)) {
+        passive.dmg = passive.dmg.map(d => Math.floor(d * multiplier));
+      } else {
+        passive.dmg = Math.floor(passive.dmg * multiplier);
+      }
+    }
+    
+    return passive;
   }
 
   generateEnemies() {
@@ -265,6 +305,49 @@ class BattleService {
     }
   }
 
+
+  applyPetPassives(battle) {
+    // Apply pet passives for all fighters
+    [...battle.team, ...battle.enemies].forEach(fighter => {
+      if (!fighter.petPassive || fighter.hp <= 0) return;
+      
+      const passive = fighter.petPassive;
+      
+      // 🦎 Lizard - Regeneration: Heal X HP per turn
+      if (passive.effect === 'regen' && passive.value) {
+        const healAmount = Math.floor(passive.value);
+        fighter.hp = Math.min(fighter.maxHp, fighter.hp + healAmount);
+        battle.battleLog.push(`🦎 ${fighter.name} regenerates ${healAmount} HP!`);
+      }
+      
+      // 🐂 Bull - Rage: +X damage accumulation per turn
+      if (passive.effect === 'rage' && passive.value) {
+        if (fighter.rageStacks === undefined) fighter.rageStacks = 0;
+        fighter.rageStacks += Math.floor(passive.value);
+        battle.battleLog.push(`🐂 ${fighter.name}'s rage builds! (+${Math.floor(passive.value)} bonus damage, total: ${fighter.rageStacks})`);
+      }
+      
+      // 🐕 Dog - Loyalty: Deal X-Y damage to random enemy
+      if (passive.effect === 'bite' && passive.dmg && fighter.userId) {
+        const targets = fighter.type === 'hero' ? battle.enemies : battle.team;
+        const aliveTargets = targets.filter(t => t.hp > 0);
+        
+        if (aliveTargets.length > 0) {
+          const target = aliveTargets[Math.floor(Math.random() * aliveTargets.length)];
+          const [minDmg, maxDmg] = passive.dmg;
+          const damage = Math.floor(Math.random() * (maxDmg - minDmg + 1)) + minDmg;
+          
+          target.hp = Math.max(0, target.hp - damage);
+          battle.battleLog.push(`🐕 ${fighter.name}'s dog attacks ${target.name} for ${damage} damage!`);
+          
+          if (target.hp === 0) {
+            battle.battleLog.push(`💀 ${target.name} was defeated by the loyal dog!`);
+          }
+        }
+      }
+    });
+  }
+
   executeDamageAbility(battle, attacker, ability, targets) {
     const [minDmg, maxDmg] = ability.dmg;
     let baseDamage = Math.floor(Math.random() * (maxDmg - minDmg + 1)) + minDmg;
@@ -289,7 +372,25 @@ class BattleService {
     const strengthBonus = attacker.strength ? attacker.strength * 0.5 : 0;
     let finalDamage = Math.floor(baseDamage + strengthBonus);
     
-    // Apply combo bonus for hero
+
+    // Apply pet passive: defense reduction (🐻 Bear)
+    targetList.forEach(target => {
+      if (target.petPassive && target.petPassive.effect === 'defense' && target.petPassive.value) {
+        const reductionPercent = target.petPassive.value;
+        const originalDamage = finalDamage;
+        finalDamage = Math.floor(finalDamage * (1 - reductionPercent));
+        if (originalDamage !== finalDamage) {
+          battle.battleLog.push(`🐻 ${target.name}'s thick fur reduces damage by ${Math.floor(reductionPercent * 100)}%!`);
+        }
+      }
+    });
+    
+    // Apply pet passive: rage damage bonus (🐂 Bull)
+    if (attacker.petPassive && attacker.petPassive.effect === 'rage' && attacker.rageStacks > 0) {
+      finalDamage += attacker.rageStacks;
+    }
+    
+        // Apply combo bonus for hero
     if (attacker.userId && battle.comboCount > 0) {
       const comboBonus = Math.floor(finalDamage * (battle.comboCount * 0.1));
       finalDamage += comboBonus;
@@ -326,9 +427,61 @@ class BattleService {
     }
 
     targetList.forEach(target => {
+      // Apply pet passive: dodge chance (🐙 Octopus)
+      if (target.petPassive && target.petPassive.effect === 'dodge' && target.petPassive.value) {
+        const dodgeChance = target.petPassive.value;
+        if (Math.random() < dodgeChance) {
+          battle.battleLog.push(`🐙 ${target.name} dodges the attack with ink cloud!`);
+          return; // Skip this target
+        }
+      }
+      
       let damage = finalDamage;
       
-      // Check shield
+
+      // Apply pet passive: increased stun chance (🕷️ Spider)
+      if (attacker.petPassive && attacker.petPassive.effect === 'stun' && attacker.petPassive.value) {
+        const stunChance = attacker.petPassive.value;
+        if (Math.random() < stunChance && !target.effects.includes('stun')) {
+          target.effects.push('stun');
+          battle.battleLog.push(`🕷️ ${target.name} is stunned by web trap!`);
+        }
+      }
+      
+      // Apply pet passive: bleed chance (🐍 Snake)
+      if (attacker.petPassive && attacker.petPassive.effect === 'bleed' && attacker.petPassive.value) {
+        const bleedChance = attacker.petPassive.value;
+        if (Math.random() < bleedChance && !target.effects.includes('bleed')) {
+          target.effects.push('bleed');
+          battle.battleLog.push(`🐍 ${target.name} is bleeding from snake bite!`);
+        }
+      }
+      
+      // Apply pet passive: splash damage (🐋 Whale)
+      if (attacker.petPassive && attacker.petPassive.effect === 'splash' && attacker.petPassive.value && ability.target === 'single') {
+        const splashChance = attacker.petPassive.value;
+        if (Math.random() < splashChance) {
+          const splashTargets = (attacker.type === 'hero' ? battle.enemies : battle.team).filter(t => t.hp > 0 && t !== target);
+          if (splashTargets.length > 0) {
+            const splashTarget = splashTargets[Math.floor(Math.random() * splashTargets.length)];
+            const splashDamage = Math.floor(damage * 0.5);
+            splashTarget.hp = Math.max(0, splashTarget.hp - splashDamage);
+            battle.battleLog.push(`🐋 Tidal wave splashes ${splashTarget.name} for ${splashDamage} damage!`);
+          }
+        }
+      }
+      
+      // Apply pet passive: headbutt bonus damage (🐐 Goat)
+      if (attacker.petPassive && attacker.petPassive.effect === 'damage' && attacker.petPassive.value && attacker.petPassive.dmg) {
+        const procChance = attacker.petPassive.value;
+        if (Math.random() < procChance) {
+          const bonusDamage = attacker.petPassive.dmg;
+          damage += bonusDamage;
+          battle.battleLog.push(`🐐 ${attacker.name} headbutts for +${bonusDamage} bonus damage!`);
+        }
+      }
+      
+            // Check shield
       if (target.shield > 0) {
         const blocked = Math.min(damage, target.shield);
         target.shield -= blocked;

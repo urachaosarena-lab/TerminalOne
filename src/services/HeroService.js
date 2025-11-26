@@ -73,7 +73,14 @@ class HeroService {
         let migrationCount = 0;
         
         Object.entries(heroes).forEach(([userId, heroData]) => {
-          ['class', 'weapon', 'pet'].forEach(type => {
+          // Migrate maxEnergy from 3 to 5
+          if (heroData.maxEnergy === 3) {
+            heroData.maxEnergy = 5;
+            migrationCount++;
+            logger.info(`Upgraded maxEnergy 3->5 for user ${userId}`);
+          }
+          
+                    ['class', 'weapon', 'pet'].forEach(type => {
             if (heroData.equipped && heroData.equipped[type]) {
               const equipped = heroData.equipped[type];
               
@@ -244,8 +251,8 @@ class HeroService {
     if (!hero) return;
     
     const now = Date.now();
-    const hoursSinceLastRecharge = (now - hero.lastEnergyRecharge) / (1000 * 60 * 60);
-    const energyToAdd = Math.floor(hoursSinceLastRecharge);
+    const halfHoursSinceLastRecharge = (now - hero.lastEnergyRecharge) / (1000 * 60 * 30);
+    const energyToAdd = Math.floor(halfHoursSinceLastRecharge);
     
     if (energyToAdd > 0 && hero.energy < hero.maxEnergy) {
       hero.energy = Math.min(hero.maxEnergy, hero.energy + energyToAdd);
