@@ -138,6 +138,11 @@ class HeroService {
     if (!hero) {
       hero = this.createHero(userId);
     }
+    // Migrate old energy system
+    if (hero.maxEnergy === 3) {
+      hero.maxEnergy = 5;
+      this.saveHeroesToFile();
+    }
     return hero;
   }
 
