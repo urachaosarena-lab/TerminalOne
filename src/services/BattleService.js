@@ -1,5 +1,5 @@
 const logger = require('../utils/logger');
-const { CLASSES, WEAPONS, PETS, ENEMIES } = require('./HeroService');
+const { CLASSES, WEAPONS, PETS, ENEMIES, CLASSES_BY_ID, WEAPONS_BY_ID, PETS_BY_ID, normalizeId } = require('./HeroService');
 
 // Companion definitions
 const COMPANIONS = {
@@ -113,14 +113,14 @@ class BattleService {
     
     const getEquippedId = (equipped) => typeof equipped === 'string' ? equipped : (equipped ? equipped.id : null);
     
-    const classId = getEquippedId(hero.equipped.class);
-    const weaponId = getEquippedId(hero.equipped.weapon);
+    const classId = normalizeId(getEquippedId(hero.equipped.class));
+    const weaponId = normalizeId(getEquippedId(hero.equipped.weapon));
     
-    if (classId && CLASSES[classId]) {
-      abilities.push(CLASSES[classId].ability);
+    if (classId && CLASSES_BY_ID[classId]) {
+      abilities.push(CLASSES_BY_ID[classId].ability);
     }
-    if (weaponId && WEAPONS[weaponId]) {
-      abilities.push(WEAPONS[weaponId].ability);
+    if (weaponId && WEAPONS_BY_ID[weaponId]) {
+      abilities.push(WEAPONS_BY_ID[weaponId].ability);
     }
     
     return abilities.length > 0 ? abilities : [

@@ -4,35 +4,35 @@ const logger = require('../utils/logger');
 
 // Item definitions
 const CLASSES = {
-   ' 💂 ' : { name:  ' Guard ' , ability: { name:  ' Shield ' , effect:  ' shield ' , dmg: [4, 20], desc:  ' Apply a 4-20 🛡️shield to you and your allies for 2 turns '  }},
-   ' 🧝 ' : { name:  ' Elf ' , ability: { name:  ' Nature Breeze ' , effect:  ' heal ' , value: 30, desc:  ' Heal 30HP to an ally or yourself '  }},
-   ' 🧙 ' : { name:  ' Wizard ' , ability: { name:  ' Fireball ' , effect:  ' damage ' , dmg: [15, 40], target:  ' two ' , desc:  ' Deal 15-40 damage to a maximum of 2 random enemies '  }},
-   ' 🧚 ' : { name:  ' Fairy ' , ability: { name:  ' Dispel ' , effect:  ' teamHeal ' , dmg: [2, 12], desc:  ' Heal you and your allies for 2-12 '  }},
-   ' 🧞 ' : { name:  ' Genie ' , ability: { name:  ' Wish ' , effect:  ' revive ' , value: 0.5, desc:  ' 50% chance to revive a fallen ally with 50% HP '  }},
-   ' 🧛 ' : { name:  ' Vampire ' , ability: { name:  ' Life Drain ' , effect:  ' drain ' , dmg: [8, 14], desc:  ' Deal 10-20 damage to all enemies and heal for 25% of the amount dealt '  }}
+   '💂' : { name:  ' Guard ' , ability: { name:  ' Shield ' , effect:  ' shield ' , dmg: [4, 20], desc:  ' Apply a 4-20 🛡️shield to you and your allies for 2 turns '  }},
+   '🧝' : { name:  ' Elf ' , ability: { name:  ' Nature Breeze ' , effect:  ' heal ' , value: 30, desc:  ' Heal 30HP to an ally or yourself '  }},
+   '🧙' : { name:  ' Wizard ' , ability: { name:  ' Fireball ' , effect:  ' damage ' , dmg: [15, 40], target:  ' two ' , desc:  ' Deal 15-40 damage to a maximum of 2 random enemies '  }},
+   '🧚' : { name:  ' Fairy ' , ability: { name:  ' Dispel ' , effect:  ' teamHeal ' , dmg: [2, 12], desc:  ' Heal you and your allies for 2-12 '  }},
+   '🧞' : { name:  ' Genie ' , ability: { name:  ' Wish ' , effect:  ' revive ' , value: 0.5, desc:  ' 50% chance to revive a fallen ally with 50% HP '  }},
+   '🧛' : { name:  ' Vampire ' , ability: { name:  ' Life Drain ' , effect:  ' drain ' , dmg: [8, 14], desc:  ' Deal 10-20 damage to all enemies and heal for 25% of the amount dealt '  }}
 };
 
 const WEAPONS = {
-   ' 🏹 ' : { name:  ' Bow ' , ability: { name:  ' Pierce Shot ' , dmg: [5, 50], target:  ' single ' , desc:  ' 5-50 damage to one enemy '  }},
-   ' 🔨 ' : { name:  ' Hammer ' , ability: { name:  ' Ground Slam ' , dmg: [5, 20], target:  ' all ' , desc:  ' 5-20 damage to all enemies '  }},
-   ' 🪓 ' : { name:  ' Axe ' , ability: { name:  ' Cleave ' , dmg: [20, 35], target:  ' single ' , desc:  ' 20-35 damage to one enemy '  }},
+   '🏹' : { name:  ' Bow ' , ability: { name:  ' Pierce Shot ' , dmg: [5, 50], target:  ' single ' , desc:  ' 5-50 damage to one enemy '  }},
+   '🔨' : { name:  ' Hammer ' , ability: { name:  ' Ground Slam ' , dmg: [5, 20], target:  ' all ' , desc:  ' 5-20 damage to all enemies '  }},
+   '🪓' : { name:  ' Axe ' , ability: { name:  ' Cleave ' , dmg: [20, 35], target:  ' single ' , desc:  ' 20-35 damage to one enemy '  }},
    ' 🗡️ ' : { name:  ' Sword ' , ability: { name:  ' Slash ' , dmg: [15, 40], target:  ' single ' , desc:  ' 15-40 damage to one enemy '  }},
    ' ⚔️ ' : { name:  ' Dual Swords ' , ability: { name:  ' Double Strike ' , dmg: [12, 25], target:  ' two ' , desc:  ' 12-25 damage to two random enemies '  }},
-   ' 🔫 ' : { name:  ' Gun ' , ability: { name:  ' Rapid Fire ' , dmg: [10, 15], target:  ' all ' , desc:  ' 10-15 damage to all enemies '  }}
+   '🔫' : { name:  ' Gun ' , ability: { name:  ' Rapid Fire ' , dmg: [10, 15], target:  ' all ' , desc:  ' 10-15 damage to all enemies '  }}
 };
 
 const PETS = {
    ' 🕷️ ' : { name:  ' Spider ' , ability: { name:  ' Web Trap ' , effect:  ' stun ' , value: 0.3, desc:  ' +30% ✨stun chance '  }},
-   ' 🦎 ' : { name:  ' Lizard ' , ability: { name:  ' Regeneration ' , effect:  ' regen ' , value: 5, desc:  ' Heal 5HP per turn '  }},
-   ' 🐍 ' : { name:  ' Snake ' , ability: { name:  ' Bite ' , effect:  ' bleed ' , value: 0.3, desc:  ' +30% 🩸bleed chance '  }},
-   ' 🐙 ' : { name:  ' Octopus ' , ability: { name:  ' Ink Cloud ' , effect:  ' dodge ' , value: 0.2, desc:  ' +20% dodge chance '  }},
-   ' 🐋 ' : { name:  ' Whale ' , ability: { name:  ' Tidal Wave ' , effect:  ' splash ' , value: 0.3, desc:  ' +30% splash damage '  }},
-   ' 🐂 ' : { name:  ' Bull ' , ability: { name:  ' Rage ' , effect:  ' rage ' , value: 2, desc:  ' +2 bonus damage accumulation per turn '  }},
-   ' 🐻 ' : { name:  ' Bear ' , ability: { name:  ' Thick Fur ' , effect:  ' defense ' , value: 0.08, desc:  ' Reduce damage taken by 8% '  }},
-   ' 🐐 ' : { name:  ' Goat ' , ability: { name:  ' Headbutt ' , effect:  ' damage ' , value: 0.5, dmg: 10, desc:  ' 50% chance to do 10 bonus damage '  }},
-   ' 🦉 ' : { name:  ' Owl ' , ability: { name:  ' Wisdom ' , effect:  ' wisdom ' , value: 0.5, desc:  ' Healing effects are increased by 50% '  }},
-   ' 🐕 ' : { name:  ' Dog ' , ability: { name:  ' Loyalty ' , effect:  ' bite ' , dmg: [5, 30], desc:  ' 5-30 damage on a random enemy '  }},
-   ' 🐈 ' : { name:  ' Cat ' , ability: { name:  ' Nine Lives ' , effect:  ' survival ' , value: 0.5, desc:  ' 50% chance to survive fatal damage '  }}
+   '🦎' : { name:  ' Lizard ' , ability: { name:  ' Regeneration ' , effect:  ' regen ' , value: 5, desc:  ' Heal 5HP per turn '  }},
+   '🐍' : { name:  ' Snake ' , ability: { name:  ' Bite ' , effect:  ' bleed ' , value: 0.3, desc:  ' +30% 🩸bleed chance '  }},
+   '🐙' : { name:  ' Octopus ' , ability: { name:  ' Ink Cloud ' , effect:  ' dodge ' , value: 0.2, desc:  ' +20% dodge chance '  }},
+   '🐋' : { name:  ' Whale ' , ability: { name:  ' Tidal Wave ' , effect:  ' splash ' , value: 0.3, desc:  ' +30% splash damage '  }},
+   '🐂' : { name:  ' Bull ' , ability: { name:  ' Rage ' , effect:  ' rage ' , value: 2, desc:  ' +2 bonus damage accumulation per turn '  }},
+   '🐻' : { name:  ' Bear ' , ability: { name:  ' Thick Fur ' , effect:  ' defense ' , value: 0.08, desc:  ' Reduce damage taken by 8% '  }},
+   '🐐' : { name:  ' Goat ' , ability: { name:  ' Headbutt ' , effect:  ' damage ' , value: 0.5, dmg: 10, desc:  ' 50% chance to do 10 bonus damage '  }},
+   '🦉' : { name:  ' Owl ' , ability: { name:  ' Wisdom ' , effect:  ' wisdom ' , value: 0.5, desc:  ' Healing effects are increased by 50% '  }},
+   '🐕' : { name:  ' Dog ' , ability: { name:  ' Loyalty ' , effect:  ' bite ' , dmg: [5, 30], desc:  ' 5-30 damage on a random enemy '  }},
+   '🐈' : { name:  ' Cat ' , ability: { name:  ' Nine Lives ' , effect:  ' survival ' , value: 0.5, desc:  ' 50% chance to survive fatal damage '  }}
 };
 
 
@@ -453,7 +453,7 @@ class HeroService {
       
       items.push({
         type,
-        id,
+        id: normalizeId(id), // Normalize shop item IDs
         rarity,
         price: prices[rarity]
       });
@@ -536,6 +536,53 @@ class HeroService {
     } else if (type === 'close') {
       this.getOrCreateHero(userId).stats.strategiesClosed++;
       return this.addXP(userId, 500);
+    }
+  }
+
+  // One-time migration to normalize all item IDs
+  migrateItemIds() {
+    let changed = false;
+    let count = 0;
+    
+    for (const [userId, hero] of this.heroes.entries()) {
+      // Migrate equipped items
+      ['class', 'weapon', 'pet'].forEach(type => {
+        if (hero.equipped[type]) {
+          const equipped = hero.equipped[type];
+          const oldId = typeof equipped === 'string' ? equipped : equipped.id;
+          const newId = normalizeId(oldId);
+          
+          if (oldId !== newId) {
+            if (typeof equipped === 'string') {
+              hero.equipped[type] = newId;
+            } else {
+              equipped.id = newId;
+            }
+            changed = true;
+            count++;
+            console.log(`[MIGRATION] User ${userId} ${type}: "${oldId}" → "${newId}"`);
+          }
+        }
+      });
+      
+      // Migrate inventory items
+      hero.inventory.forEach((item, idx) => {
+        const oldId = item.id;
+        const newId = normalizeId(oldId);
+        if (oldId !== newId) {
+          item.id = newId;
+          changed = true;
+          count++;
+          console.log(`[MIGRATION] User ${userId} inventory[${idx}]: "${oldId}" → "${newId}"`);
+        }
+      });
+    }
+    
+    if (changed) {
+      this.saveHeroesToFile();
+      console.log(`[MIGRATION] ✅ Migrated ${count} items across ${this.heroes.size} heroes`);
+    } else {
+      console.log('[MIGRATION] ✅ No migration needed - all IDs already normalized');
     }
   }
 }
