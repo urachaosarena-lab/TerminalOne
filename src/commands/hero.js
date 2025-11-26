@@ -27,7 +27,7 @@ Welcome to the arena! Battle enemies with your companions **👩‍🦰Mira** an
 • Companions attack automatically
 • Win battles to gain XP, 💎S currency, and loot!
 
-⚡ **Energy:** ${hero.energy}/${hero.maxEnergy} (${hero.energy < hero.maxEnergy ? 'recharges 1/hour' : 'full!'})
+⚡ **Energy:** ${hero.energy}/${hero.maxEnergy} (${hero.energy < hero.maxEnergy ? 'recharges 1 per 30min' : 'full!'})
 🧪 **Level:** ${hero.level}
 💎 **Currency:** ${hero.currency} S
 
@@ -137,7 +137,7 @@ ${getBotTitle()}
 🗡️ **PvP:** 🚧 Under Construction 🚧
 *Coming in Phase 2 with ranked ladder!*
 
-${hero.energy > 0 ? '⚔️ Ready to battle!' : '⏰ Energy recharges 1/hour'}
+${hero.energy > 0 ? '⚔️ Ready to battle!' : '⏰ Energy recharges 1 per 30min'}
   `;
 
   await ctx.editMessageText(message, {
