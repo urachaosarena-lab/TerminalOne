@@ -36,6 +36,8 @@ const PETS = {
 };
 
 
+const ENEMIES = ['🧝', '🧞', '🧛', '🧜', '🧟', '🐦‍⬛', '🕷️', '🦟', '🦇', '🦖'];
+
 class HeroService {
   constructor() {
     this.heroStoragePath = path.join(__dirname, '../../data/heroes.json');
