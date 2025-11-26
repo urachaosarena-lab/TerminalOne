@@ -38,6 +38,7 @@ Welcome to the arena! Battle enemies with your companions **👩‍🦰Mira** an
     [Markup.button.callback('👤 Profile', 'hero_profile')],
     [Markup.button.callback('⚔️ Battle', 'hero_battle_menu')],
     [Markup.button.callback('🎒 Inventory', 'hero_inventory')],
+    [Markup.button.callback('🏹 Items Guide', 'hero_items_guide')],
     [Markup.button.callback('🔙 Main Menu', 'back_to_main')]
   ]);
 
@@ -110,7 +111,6 @@ ${hero.unspentPoints > 0 ? `✨ **Unspent Points:** ${hero.unspentPoints}` : ''}
     );
   }
   
-  buttons.push([Markup.button.callback('🏹 Items Guide', 'hero_items_guide')]);
   buttons.push([Markup.button.callback('🔙 Back', 'hero_menu'), Markup.button.callback('🏠 Main Menu', 'back_to_main')]);
 
   await ctx.editMessageText(message, {
@@ -499,7 +499,7 @@ ${getBotTitle()}
   await ctx.editMessageText(message, {
     parse_mode: 'Markdown',
     ...Markup.inlineKeyboard([
-      [Markup.button.callback('🔙 Back to Profile', 'hero_profile')]
+      [Markup.button.callback('🔙 Back to Hero Menu', 'hero_menu')]
     ])
   });
 };

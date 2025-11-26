@@ -516,11 +516,11 @@ ${formatted.volume}
     });
     
     // Hero/RPG callbacks
-    this.bot.action('hero_menu', heroHandlers.handleHeroMenu);
-    this.bot.action('hero_profile', heroHandlers.handleProfile);
-    this.bot.action('hero_battle_menu', heroHandlers.handleBattleMenu);
-    this.bot.action('hero_inventory', heroHandlers.handleInventory);
-    this.bot.action('hero_items_guide', heroHandlers.handleItemsGuide);
+    this.bot.action('hero_menu', async (ctx) => { try { await heroHandlers.handleHeroMenu(ctx); } catch(e) { logger.error('Error in hero_menu:', e); try { await ctx.answerCbQuery('❌ Error loading menu'); } catch(_) {} } });
+    this.bot.action('hero_profile', async (ctx) => { try { await heroHandlers.handleProfile(ctx); } catch(e) { logger.error('Error in hero_profile:', e); try { await ctx.answerCbQuery('❌ Error loading profile'); } catch(_) {} } });
+    this.bot.action('hero_battle_menu', async (ctx) => { try { await heroHandlers.handleBattleMenu(ctx); } catch(e) { logger.error('Error in hero_battle_menu:', e); try { await ctx.answerCbQuery('❌ Error loading battle menu'); } catch(_) {} } });
+    this.bot.action('hero_inventory', async (ctx) => { try { await heroHandlers.handleInventory(ctx); } catch(e) { logger.error('Error in hero_inventory:', e); try { await ctx.answerCbQuery('❌ Error loading inventory'); } catch(_) {} } });
+    this.bot.action('hero_items_guide', async (ctx) => { try { await heroHandlers.handleItemsGuide(ctx); } catch(e) { logger.error('Error in hero_items_guide:', e); try { await ctx.answerCbQuery('❌ Error loading items guide'); } catch(_) {} } });
     
     // Stat allocation callbacks
     this.bot.action('stat_strength', async (ctx) => {
