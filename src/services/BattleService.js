@@ -372,25 +372,12 @@ class BattleService {
     const strengthBonus = attacker.strength ? attacker.strength * 0.5 : 0;
     let finalDamage = Math.floor(baseDamage + strengthBonus);
     
-
-    // Apply pet passive: defense reduction (🐻 Bear)
-    targetList.forEach(target => {
-      if (target.petPassive && target.petPassive.effect === 'defense' && target.petPassive.value) {
-        const reductionPercent = target.petPassive.value;
-        const originalDamage = finalDamage;
-        finalDamage = Math.floor(finalDamage * (1 - reductionPercent));
-        if (originalDamage !== finalDamage) {
-          battle.battleLog.push(`🐻 ${target.name}'s thick fur reduces damage by ${Math.floor(reductionPercent * 100)}%!`);
-        }
-      }
-    });
-    
     // Apply pet passive: rage damage bonus (🐂 Bull)
     if (attacker.petPassive && attacker.petPassive.effect === 'rage' && attacker.rageStacks > 0) {
       finalDamage += attacker.rageStacks;
     }
     
-        // Apply combo bonus for hero
+    // Apply combo bonus for hero
     if (attacker.userId && battle.comboCount > 0) {
       const comboBonus = Math.floor(finalDamage * (battle.comboCount * 0.1));
       finalDamage += comboBonus;
@@ -437,6 +424,16 @@ class BattleService {
       }
       
       let damage = finalDamage;
+      
+      // Apply pet passive: defense reduction (🐻 Bear)
+      if (target.petPassive && target.petPassive.effect === 'defense' && target.petPassive.value) {
+        const reductionPercent = target.petPassive.value;
+        const originalDamage = damage;
+        damage = Math.floor(damage * (1 - reductionPercent));
+        if (originalDamage !== damage) {
+          battle.battleLog.push(`🐻 ${target.name}'s thick fur reduces damage by ${Math.floor(reductionPercent * 100)}%!`);
+        }
+      }
       
 
       // Apply pet passive: increased stun chance (🕷️ Spider)
