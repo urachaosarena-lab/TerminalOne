@@ -36,6 +36,30 @@ const PETS = {
 };
 
 
+// Canonical ID normalization utility
+function normalizeId(id) {
+  if (!id) return '';
+  return String(id)
+    .normalize('NFKC')           // Normalize Unicode
+    .replace(/️/g, '')      // Remove variation selector 16
+    .replace(/‍/g, '')      // Remove zero-width joiner
+    .trim();                      // Remove leading/trailing whitespace
+}
+
+// Build canonical lookup maps with normalized keys
+function canonicalizeMap(map) {
+  const result = {};
+  for (const [key, value] of Object.entries(map)) {
+    const normalizedKey = normalizeId(key);
+    result[normalizedKey] = value;
+  }
+  return result;
+}
+
+const CLASSES_BY_ID = canonicalizeMap(CLASSES);
+const WEAPONS_BY_ID = canonicalizeMap(WEAPONS);
+const PETS_BY_ID = canonicalizeMap(PETS);
+
 const ENEMIES = ['🧝', '🧞', '🧛', '🧜', '🧟', '🐦‍⬛', '🕷️', '🦟', '🦇', '🦖'];
 
 class HeroService {
@@ -516,4 +540,9 @@ class HeroService {
   }
 }
 
-module.exports = { HeroService, CLASSES, WEAPONS, PETS, ENEMIES };
+module.exports = { 
+  HeroService, 
+  CLASSES, WEAPONS, PETS, ENEMIES,           // Legacy maps
+  CLASSES_BY_ID, WEAPONS_BY_ID, PETS_BY_ID, // Canonical maps
+  normalizeId                                 // Utility function
+};

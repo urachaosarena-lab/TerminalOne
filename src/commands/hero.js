@@ -1,6 +1,6 @@
 const { Markup } = require('telegraf');
 const { getBotTitle } = require('../utils/version');
-const { CLASSES, WEAPONS, PETS } = require('../services/HeroService');
+const { CLASSES, WEAPONS, PETS, CLASSES_BY_ID, WEAPONS_BY_ID, PETS_BY_ID, normalizeId } = require('../services/HeroService');
 
 const handleHeroMenu = async (ctx) => {
   const userId = ctx.from.id;
@@ -76,21 +76,22 @@ const handleProfile = async (ctx) => {
   const getEquippedRarity = (equipped) => typeof equipped === 'object' && equipped.rarity ? equipped.rarity : 'common';
   const raritySymbols = { common: '⚪️', rare: '🔵', legendary: '🟠' };
 
-  // Defensive checks for equipped items
+  // Defensive checks for equipped items with ID normalization
   const getEquippedDisplay = (equipped, itemsObj, type) => {
     if (!equipped) return '❌ None';
-    const id = getEquippedId(equipped);
+    const rawId = getEquippedId(equipped);
+    const id = normalizeId(rawId);
     const item = itemsObj[id];
     if (!item) {
-      console.warn(`[HERO] Invalid ${type} ID: ${id}`);
-      return `${id} Unknown ⚠️`;
+      console.warn(`[HERO] Invalid ${type} ID: ${rawId} (normalized: ${id})`);
+      return `${rawId} Unknown ⚠️`;
     }
-    return `${id} ${item.name} ${raritySymbols[getEquippedRarity(equipped)]}`;
+    return `${rawId} ${item.name} ${raritySymbols[getEquippedRarity(equipped)]}`;
   };
 
-  const equippedClass = getEquippedDisplay(hero.equipped.class, CLASSES, 'class');
-  const equippedWeapon = getEquippedDisplay(hero.equipped.weapon, WEAPONS, 'weapon');
-  const equippedPet = getEquippedDisplay(hero.equipped.pet, PETS, 'pet');
+  const equippedClass = getEquippedDisplay(hero.equipped.class, CLASSES_BY_ID, 'class');
+  const equippedWeapon = getEquippedDisplay(hero.equipped.weapon, WEAPONS_BY_ID, 'weapon');
+  const equippedPet = getEquippedDisplay(hero.equipped.pet, PETS_BY_ID, 'pet');
 
   const message = `
 ${getBotTitle()}
@@ -208,10 +209,11 @@ const handleInventory = async (ctx) => {
     const preview = hero.inventory.slice(0, 10);
     itemsList = preview.map((item, idx) => {
       const emoji = rarityEmoji[item.rarity];
+      const id = normalizeId(item.id);
       let name = 'Unknown';
-      if (item.type === 'class' && CLASSES[item.id]) name = CLASSES[item.id].name;
-      else if (item.type === 'weapon' && WEAPONS[item.id]) name = WEAPONS[item.id].name;
-      else if (item.type === 'pet' && PETS[item.id]) name = PETS[item.id].name;
+      if (item.type === 'class' && CLASSES_BY_ID[id]) name = CLASSES_BY_ID[id].name;
+      else if (item.type === 'weapon' && WEAPONS_BY_ID[id]) name = WEAPONS_BY_ID[id].name;
+      else if (item.type === 'pet' && PETS_BY_ID[id]) name = PETS_BY_ID[id].name;
       return `${emoji} ${idx + 1}. ${item.id} ${name}`;
     }).join('\\n');
     if (hero.inventory.length > 10) {
@@ -286,9 +288,11 @@ const handleEquipType = async (ctx, type) => {
 
   const rarityEmoji = { common: '⚪', rare: '🔵', legendary: '🟠' };
   const itemList = items.slice(0, 10).map((item, idx) => {
-    const name = type === 'class' ? CLASSES[item.id].name :
-                 type === 'weapon' ? WEAPONS[item.id].name :
-                 PETS[item.id].name;
+    const id = normalizeId(item.id);
+    let name = 'Unknown';
+    if (type === 'class' && CLASSES_BY_ID[id]) name = CLASSES_BY_ID[id].name;
+    else if (type === 'weapon' && WEAPONS_BY_ID[id]) name = WEAPONS_BY_ID[id].name;
+    else if (type === 'pet' && PETS_BY_ID[id]) name = PETS_BY_ID[id].name;
     return `${rarityEmoji[item.rarity]} ${idx + 1}. ${item.id} ${name}`;
   }).join('\\n');
 
@@ -352,9 +356,11 @@ ${fuseable.length > 0 ? '**Fuseable items (5+ of same):**' : '⚠️ No fuseable
 
 ${fuseable.length > 0 ? fuseable.map(g => {
   const rarityEmoji = { common: '⚪', rare: '🔵' };
-  const name = g.item.type === 'class' ? CLASSES[g.item.id].name :
-               g.item.type === 'weapon' ? WEAPONS[g.item.id].name :
-               PETS[g.item.id].name;
+  const id = normalizeId(g.item.id);
+  let name = 'Unknown';
+  if (g.item.type === 'class' && CLASSES_BY_ID[id]) name = CLASSES_BY_ID[id].name;
+  else if (g.item.type === 'weapon' && WEAPONS_BY_ID[id]) name = WEAPONS_BY_ID[id].name;
+  else if (g.item.type === 'pet' && PETS_BY_ID[id]) name = PETS_BY_ID[id].name;
   return `${rarityEmoji[g.item.rarity]} ${g.item.id} ${name} (${g.count})`;
 }).join('\\n') : ''}
 
@@ -390,9 +396,11 @@ const handleInventorySell = async (ctx) => {
   const items = hero.inventory.slice(0, 10);
   
   const itemList = items.map((item, idx) => {
-    const name = item.type === 'class' ? CLASSES[item.id].name :
-                 item.type === 'weapon' ? WEAPONS[item.id].name :
-                 PETS[item.id].name;
+    const id = normalizeId(item.id);
+    let name = 'Unknown';
+    if (item.type === 'class' && CLASSES_BY_ID[id]) name = CLASSES_BY_ID[id].name;
+    else if (item.type === 'weapon' && WEAPONS_BY_ID[id]) name = WEAPONS_BY_ID[id].name;
+    else if (item.type === 'pet' && PETS_BY_ID[id]) name = PETS_BY_ID[id].name;
     const isPet = item.type === 'pet';
     const prices = {
       common: isPet ? 50 : 25,
@@ -447,9 +455,11 @@ const handleInventoryShop = async (ctx) => {
   const rarityEmoji = { common: '⚪', rare: '🔵', legendary: '🟠' };
   
   const shopList = shop.map((item, idx) => {
-    const name = item.type === 'class' ? CLASSES[item.id].name :
-                 item.type === 'weapon' ? WEAPONS[item.id].name :
-                 PETS[item.id].name;
+    const id = normalizeId(item.id);
+    let name = 'Unknown';
+    if (item.type === 'class' && CLASSES_BY_ID[id]) name = CLASSES_BY_ID[id].name;
+    else if (item.type === 'weapon' && WEAPONS_BY_ID[id]) name = WEAPONS_BY_ID[id].name;
+    else if (item.type === 'pet' && PETS_BY_ID[id]) name = PETS_BY_ID[id].name;
     return `${rarityEmoji[item.rarity]} ${idx + 1}. ${item.id} ${name} - ${item.price}💎`;
   }).join('\\n');
 
