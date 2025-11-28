@@ -249,14 +249,19 @@ const handleBackToAbilities = async (ctx) => {
 const displayBattleTurn = async (ctx, battle) => {
   const hero = battle.team[0];
   
-  // Build battle log FIRST
+  // Build battle log
   const log = battle.battleLog.join('\n');
-  const logSection = log ? `**Battle Log:**\n${log}\n\n` : '';
+  const logSection = log ? `\n**Battle Log:**\n${log}\n` : '';
   
-  // Then get battle display (enemies + environment + team)
+  // Get battle display and inject log after title, before enemies
   const battleDisplay = displayBattle(battle);
   
-  const message = battleDisplay + '\n' + logSection + '**Select your ability:**';
+  // Insert log right after "Battle - Turn X" title
+  const titleEnd = battleDisplay.indexOf('**\n\n**Enemies:**');
+  const beforeEnemies = battleDisplay.substring(0, titleEnd + 3);
+  const afterTitle = battleDisplay.substring(titleEnd + 3);
+  
+  const message = beforeEnemies + logSection + afterTitle + '\n**Select your ability:**';
 
   const buttons = hero.abilities.map((ability, i) => {
     return [Markup.button.callback(`${i + 1}. ${ability.name}`, `ability_${i}`)];
