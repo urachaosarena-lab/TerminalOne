@@ -275,6 +275,9 @@ class BattleService {
       }
     });
 
+    // Apply pet passives (regen, rage, dog bite)
+    this.applyPetPassives(battle);
+    
     // Apply bleed effects
     this.applyDOT(battle);
 
@@ -349,6 +352,8 @@ class BattleService {
   }
 
   executeDamageAbility(battle, attacker, ability, targets) {
+    battle.battleLog.push(`⚔️ ${attacker.name} uses ${ability.name}!`);
+    
     const [minDmg, maxDmg] = ability.dmg;
     let baseDamage = Math.floor(Math.random() * (maxDmg - minDmg + 1)) + minDmg;
     
@@ -498,6 +503,18 @@ class BattleService {
         battle.comboCount = 0;
       }
     });
+    
+    // Log damage dealt
+    if (targetList.length > 0) {
+      const targetNames = targetList.map(t => t.name).join(', ');
+      battle.battleLog.push(`${attacker.name} used ${ability.name} on ${targetNames} for ${finalDamage} damage!`);
+      
+      targetList.forEach(t => {
+        if (t.hp === 0) {
+          battle.battleLog.push(`💀 ${t.name} was defeated!`);
+        }
+      });
+    }
   }
 
   executeSupportAbility(battle, attacker, ability, targets, allies) {
@@ -511,6 +528,9 @@ class BattleService {
         if (Math.random() < chance) {
           target.effects.push({ type: 'stun', duration: 1 });
           target.lastAction = `Attacked by ${attacker.name} Stunned ✨`;
+          battle.battleLog.push(`${attacker.name} used ${ability.name} and stunned ${target.name}! ✨`);
+        } else {
+          battle.battleLog.push(`${attacker.name} used ${ability.name} but missed!`);
         }
       }
     } else if (ability.effect === 'bleed') {
@@ -521,9 +541,13 @@ class BattleService {
         if (Math.random() < chance) {
           target.effects.push({ type: 'bleed', duration: 3, damage: 10 });
           target.lastAction = `Attacked by ${attacker.name} Bleeding 🩸`;
+          battle.battleLog.push(`${attacker.name} used ${ability.name} and ${target.name} is bleeding! 🩸`);
+        } else {
+          battle.battleLog.push(`${attacker.name} used ${ability.name} but missed!`);
         }
       }
     } else if (ability.effect === 'heal') {
+      battle.battleLog.push(`✨ ${attacker.name} uses ${ability.name}!`);
       allies.forEach(ally => {
         if (ally.hp > 0 && ally.hp < ally.maxHp) {
           const heal = ability.value;
@@ -532,10 +556,13 @@ class BattleService {
         }
       });
     } else if (ability.effect === 'shield') {
+      battle.battleLog.push(`🛡️ ${attacker.name} uses ${ability.name}!`);
       allies.forEach(ally => {
         if (ally.hp > 0) {
-          ally.shield += ability.value;
-          battle.battleLog.push(`${attacker.name} granted ${ally.name} +${ability.value} shield!`);
+          const [minShield, maxShield] = ability.dmg;
+          const shieldAmount = Math.floor(Math.random() * (maxShield - minShield + 1)) + minShield;
+          ally.shield += shieldAmount;
+          battle.battleLog.push(`${attacker.name} granted ${ally.name} +${shieldAmount} shield!`);
         }
       });
     }
