@@ -76,7 +76,7 @@ const handleStartBattle = async (ctx) => {
   });
   buttons.push([Markup.button.callback('❌ Flee Battle', 'battle_flee')]);
 
-  await ctx.editMessageText(message + '\\n\\n**Select your ability:**', {
+  await ctx.editMessageText(message + '\n\n**Select your ability:**', {
     parse_mode: 'Markdown',
     ...Markup.inlineKeyboard(buttons)
   });
@@ -248,11 +248,15 @@ const handleBackToAbilities = async (ctx) => {
 
 const displayBattleTurn = async (ctx, battle) => {
   const hero = battle.team[0];
+  
+  // Build battle log FIRST
+  const log = battle.battleLog.join('\n');
+  const logSection = log ? `**Battle Log:**\n${log}\n\n` : '';
+  
+  // Then get battle display (enemies + environment + team)
   const battleDisplay = displayBattle(battle);
   
-  const log = battle.battleLog.join('\\n');
-  
-  const message = battleDisplay + '\\n\\n**Battle Log:**\\n' + log + '\\n\\n**Select your ability:**';
+  const message = battleDisplay + '\n' + logSection + '**Select your ability:**';
 
   const buttons = hero.abilities.map((ability, i) => {
     return [Markup.button.callback(`${i + 1}. ${ability.name}`, `ability_${i}`)];
